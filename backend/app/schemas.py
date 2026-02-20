@@ -96,16 +96,20 @@ class ResourceOut(BaseModel):
 class RoleCreate(BaseModel):
     name: str
     org_id: str
+    is_public: bool = False
 
 
 class RoleUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    is_public: Optional[bool] = None
 
 
 class RoleOut(BaseModel):
     id: str
     name: str
     org_id: str
+    is_public: bool
+    is_org_role: bool
 
     model_config = {"from_attributes": True}
 
@@ -150,3 +154,26 @@ class EffectivePermission(BaseModel):
 class ResolveResponse(BaseModel):
     user_id: str
     permissions: list[EffectivePermission]
+
+
+# ── Interactions ───────────────────────────────────────────────────────────────
+
+class RoleLink(BaseModel):
+    this_role_id: str
+    this_role_name: str
+    foreign_role_id: str
+    foreign_role_name: str
+    relation: str  # "includes" | "included_by"
+
+
+class OrgInteraction(BaseModel):
+    foreign_org_id: str
+    foreign_org_name: str
+    roles: list[RoleLink]
+
+
+class OrgInteractionsOut(BaseModel):
+    org_id: str
+    org_name: str
+    parent_id: Optional[str]
+    interactions: list[OrgInteraction]

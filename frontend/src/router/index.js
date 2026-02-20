@@ -5,6 +5,7 @@ import UsersView from '../views/UsersView.vue'
 import RolesView from '../views/RolesView.vue'
 import ResourcesView from '../views/ResourcesView.vue'
 import ResolveView from '../views/ResolveView.vue'
+import InteractionsView from '../views/InteractionsView.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -14,6 +15,7 @@ const routes = [
   { path: '/roles', component: RolesView, meta: { requiresAuth: true } },
   { path: '/resources', component: ResourcesView, meta: { requiresAuth: true } },
   { path: '/resolve', component: ResolveView, meta: { requiresAuth: true } },
+  { path: '/interactions', component: InteractionsView, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

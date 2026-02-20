@@ -65,6 +65,8 @@ class Role(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    is_public   = Column(Boolean, default=False, nullable=False)
+    is_org_role = Column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("name", "org_id", name="uq_role_name_org"),

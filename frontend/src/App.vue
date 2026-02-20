@@ -7,6 +7,7 @@
       <router-link to="/roles" style="color:#acd">Roles</router-link>
       <router-link to="/resources" style="color:#acd">Resources</router-link>
       <router-link to="/resolve" style="color:#acd">Resolve</router-link>
+      <router-link v-if="auth.isAdmin" to="/interactions" style="color:#acd">Interactions</router-link>
       <span style="margin-left:auto;font-size:0.85em">{{ auth.user?.username }}</span>
       <button @click="auth.logout(); $router.push('/login')" style="margin-left:8px;cursor:pointer;background:#c44;border:none;color:#fff;padding:4px 10px;border-radius:4px">Logout</button>
     </nav>

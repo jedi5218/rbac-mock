@@ -143,3 +143,128 @@ async def org_in_subtree(db: AsyncSession, admin_org_id: str, target_org_id: str
     """)
     result = await db.execute(sql, {"admin_org_id": admin_org_id, "target_org_id": target_org_id})
     return result.scalar() is not None
+
+
+# ── Org-role helper ───────────────────────────────────────────────────────────
+
+async def get_org_role(db: AsyncSession, org_id: str):
+    """Return the auto-created @members role for an org, or None."""
+    from sqlalchemy import select
+    from app.models import Role
+    result = await db.execute(
+        select(Role).where(Role.org_id == org_id, Role.is_org_role == True)
+    )
+    return result.scalar_one_or_none()
+
+
+# ── Cross-org interactions ─────────────────────────────────────────────────────
+
+async def get_interactions(db: AsyncSession, org_ids: list[str]) -> dict[str, dict]:
+    """
+    For each org in org_ids, find cross-org role interactions, excluding
+    ancestor/descendant org relationships (intra-hierarchy sharing is expected).
+
+    Returns:  {this_org_id: {foreign_org_id: {"foreign_org_name": str, "roles": [...]}}}
+    """
+    if not org_ids:
+        return {}
+
+    sql = text("""
+        WITH RECURSIVE
+        -- Ancestors of each visible org (walk up)
+        ancestors AS (
+            SELECT id AS org_id, parent_id AS related_id
+            FROM   organizations
+            WHERE  id = ANY(:org_ids) AND parent_id IS NOT NULL
+            UNION
+            SELECT a.org_id, o.parent_id
+            FROM   organizations o
+            JOIN   ancestors a ON o.id = a.related_id
+            WHERE  o.parent_id IS NOT NULL
+        ),
+        -- Descendants of each visible org (walk down)
+        descendants AS (
+            SELECT parent_id AS org_id, id AS related_id
+            FROM   organizations
+            WHERE  parent_id = ANY(:org_ids)
+            UNION
+            SELECT d.org_id, o.id
+            FROM   organizations o
+            JOIN   descendants d ON o.parent_id = d.related_id
+        ),
+        -- Self entries (each org is related to itself)
+        self_rel AS (
+            SELECT id AS org_id, id AS related_id
+            FROM   organizations WHERE id = ANY(:org_ids)
+        ),
+        -- Union of all intra-hierarchy org pairs to exclude
+        excluded AS (
+            SELECT org_id, related_id FROM ancestors
+            UNION
+            SELECT org_id, related_id FROM descendants
+            UNION
+            SELECT org_id, related_id FROM self_rel
+        ),
+        -- Cross-org role inclusions from two directions
+        raw AS (
+            -- Our org's role INCLUDES foreign org's role
+            SELECT r1.org_id AS this_org,
+                   r2.org_id AS foreign_org,
+                   r1.id     AS this_role_id,
+                   r1.name   AS this_role_name,
+                   r2.id     AS foreign_role_id,
+                   r2.name   AS foreign_role_name,
+                   'includes'::text AS relation
+            FROM   role_inclusions ri
+            JOIN   roles r1 ON ri.role_id          = r1.id
+            JOIN   roles r2 ON ri.included_role_id = r2.id
+            WHERE  r1.org_id = ANY(:org_ids)
+              AND  r1.org_id != r2.org_id
+
+            UNION ALL
+
+            -- Our org's role IS INCLUDED BY foreign org's role
+            SELECT r1.org_id,
+                   r2.org_id,
+                   r1.id, r1.name,
+                   r2.id, r2.name,
+                   'included_by'::text
+            FROM   role_inclusions ri
+            JOIN   roles r1 ON ri.included_role_id = r1.id
+            JOIN   roles r2 ON ri.role_id          = r2.id
+            WHERE  r1.org_id = ANY(:org_ids)
+              AND  r1.org_id != r2.org_id
+        )
+        SELECT raw.*,
+               o_foreign.name AS foreign_org_name
+        FROM   raw
+        JOIN   organizations o_foreign ON o_foreign.id = raw.foreign_org
+        WHERE  NOT EXISTS (
+            SELECT 1 FROM excluded e
+            WHERE  e.org_id = raw.this_org AND e.related_id = raw.foreign_org
+        )
+        ORDER BY raw.this_org, raw.foreign_org, raw.this_role_name
+    """)
+
+    result = await db.execute(sql, {"org_ids": org_ids})
+    rows = result.mappings().all()
+
+    # Group: this_org → foreign_org → list of role links
+    out: dict[str, dict] = {}
+    for row in rows:
+        this_org    = str(row["this_org"])
+        foreign_org = str(row["foreign_org"])
+        out.setdefault(this_org, {})
+        out[this_org].setdefault(foreign_org, {
+            "foreign_org_id":   foreign_org,
+            "foreign_org_name": row["foreign_org_name"],
+            "roles": [],
+        })
+        out[this_org][foreign_org]["roles"].append({
+            "this_role_id":    str(row["this_role_id"]),
+            "this_role_name":  row["this_role_name"],
+            "foreign_role_id": str(row["foreign_role_id"]),
+            "foreign_role_name": row["foreign_role_name"],
+            "relation":        row["relation"],
+        })
+    return out

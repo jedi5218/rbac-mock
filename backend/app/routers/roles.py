@@ -17,11 +17,29 @@ from app.permissions import (
 router = APIRouter(prefix="/roles", tags=["roles"])
 
 
+# ── Scope helpers ─────────────────────────────────────────────────────────────
+
 async def _admin_owns_org(current_user: User, org_id: str, db: AsyncSession):
     if current_user.is_superadmin:
         return
     if not await org_in_subtree(db, current_user.org_id, org_id):
         raise HTTPException(403, "Role org is outside your admin scope")
+
+
+async def _can_use_role(current_user: User, role: Role, db: AsyncSession):
+    """Check that the admin can reference role (public → always; private → org scope)."""
+    if role.is_public or current_user.is_superadmin:
+        return
+    if not await org_in_subtree(db, current_user.org_id, role.org_id):
+        raise HTTPException(
+            403,
+            f"Role '{role.name}' is private and outside your org scope",
+        )
+
+
+def _guard_org_role(role: Role, operation: str = "modify"):
+    if role.is_org_role:
+        raise HTTPException(403, f"Cannot {operation} an org-member (@members) role")
 
 
 # ── Role CRUD ─────────────────────────────────────────────────────────────────
@@ -46,7 +64,7 @@ async def create_role(
     if not org:
         raise HTTPException(404, "Org not found")
     await _admin_owns_org(current_user, body.org_id, db)
-    role = Role(name=body.name, org_id=body.org_id)
+    role = Role(name=body.name, org_id=body.org_id, is_public=body.is_public, is_org_role=False)
     db.add(role)
     await db.commit()
     await db.refresh(role)
@@ -63,8 +81,12 @@ async def update_role(
     role = await db.get(Role, role_id)
     if not role:
         raise HTTPException(404, "Role not found")
+    _guard_org_role(role, "rename")
     await _admin_owns_org(current_user, role.org_id, db)
-    role.name = body.name
+    if body.name is not None:
+        role.name = body.name
+    if body.is_public is not None:
+        role.is_public = body.is_public
     await db.commit()
     await db.refresh(role)
     return role
@@ -79,6 +101,7 @@ async def delete_role(
     role = await db.get(Role, role_id)
     if not role:
         raise HTTPException(404, "Role not found")
+    _guard_org_role(role, "delete")
     await _admin_owns_org(current_user, role.org_id, db)
     await db.delete(role)
     await db.commit()
@@ -111,8 +134,7 @@ async def list_inclusions(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    role = await db.get(Role, role_id)
-    if not role:
+    if not await db.get(Role, role_id):
         raise HTTPException(404, "Role not found")
     result = await db.execute(
         select(Role).join(RoleInclusion, RoleInclusion.included_role_id == Role.id)
@@ -136,13 +158,15 @@ async def add_inclusion(
         raise HTTPException(404, "Included role not found")
     if role_id == body.included_role_id:
         raise HTTPException(422, "A role cannot include itself")
+
     await _admin_owns_org(current_user, role.org_id, db)
+    # Public included roles can be used by anyone; private ones require scope
+    await _can_use_role(current_user, included, db)
+
     await check_inclusion_cycle(db, role_id, body.included_role_id)
-    existing = await db.get(RoleInclusion, (role_id, body.included_role_id))
-    if existing:
-        return
-    db.add(RoleInclusion(role_id=role_id, included_role_id=body.included_role_id))
-    await db.commit()
+    if not await db.get(RoleInclusion, (role_id, body.included_role_id)):
+        db.add(RoleInclusion(role_id=role_id, included_role_id=body.included_role_id))
+        await db.commit()
 
 
 @router.delete("/{role_id}/inclusions/{included_role_id}", status_code=204)
@@ -170,8 +194,7 @@ async def list_parents(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    role = await db.get(Role, role_id)
-    if not role:
+    if not await db.get(Role, role_id):
         raise HTTPException(404, "Role not found")
     result = await db.execute(
         select(Role).join(RoleInclusion, RoleInclusion.role_id == Role.id)
@@ -190,20 +213,24 @@ async def add_parent(
     role = await db.get(Role, role_id)
     if not role:
         raise HTTPException(404, "Role not found")
+    # Org-member roles cannot have parents (they are leaf nodes in the DAG)
+    _guard_org_role(role, "add parents to")
+
     parent = await db.get(Role, body.parent_role_id)
     if not parent:
         raise HTTPException(404, "Parent role not found")
     if role_id == body.parent_role_id:
         raise HTTPException(422, "A role cannot be its own parent")
-    # Admin must have scope over the parent role's org (since it owns the inclusion)
-    await _admin_owns_org(current_user, parent.org_id, db)
-    # Cycle check: adding (parent, this_role) — walk down from this_role, reject if parent reachable
+
+    # The admin must manage the child role's org
+    await _admin_owns_org(current_user, role.org_id, db)
+    # The parent role must be accessible (public OR within admin's scope)
+    await _can_use_role(current_user, parent, db)
+
     await check_inclusion_cycle(db, body.parent_role_id, role_id)
-    existing = await db.get(RoleInclusion, (body.parent_role_id, role_id))
-    if existing:
-        return
-    db.add(RoleInclusion(role_id=body.parent_role_id, included_role_id=role_id))
-    await db.commit()
+    if not await db.get(RoleInclusion, (body.parent_role_id, role_id)):
+        db.add(RoleInclusion(role_id=body.parent_role_id, included_role_id=role_id))
+        await db.commit()
 
 
 @router.delete("/{role_id}/parents/{parent_role_id}", status_code=204)
@@ -213,10 +240,14 @@ async def remove_parent(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    role = await db.get(Role, role_id)
+    if not role:
+        raise HTTPException(404, "Role not found")
+    _guard_org_role(role, "remove parents from")
     parent = await db.get(Role, parent_role_id)
     if not parent:
         raise HTTPException(404, "Parent role not found")
-    await _admin_owns_org(current_user, parent.org_id, db)
+    await _can_use_role(current_user, parent, db)
     inc = await db.get(RoleInclusion, (parent_role_id, role_id))
     if inc:
         await db.delete(inc)
@@ -231,8 +262,7 @@ async def list_permissions(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    role = await db.get(Role, role_id)
-    if not role:
+    if not await db.get(Role, role_id):
         raise HTTPException(404, "Role not found")
     result = await db.execute(
         select(RoleResourcePermission).where(RoleResourcePermission.role_id == role_id)
@@ -246,9 +276,7 @@ async def get_inherited_permissions(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Returns {resource_id: bits} for permissions inherited from included roles."""
-    role = await db.get(Role, role_id)
-    if not role:
+    if not await db.get(Role, role_id):
         raise HTTPException(404, "Role not found")
     return await get_role_inherited_permissions(db, role_id)
 
@@ -264,19 +292,14 @@ async def set_permission(
     role = await db.get(Role, role_id)
     if not role:
         raise HTTPException(404, "Role not found")
-    resource = await db.get(Resource, resource_id)
-    if not resource:
+    if not await db.get(Resource, resource_id):
         raise HTTPException(404, "Resource not found")
     await _admin_owns_org(current_user, role.org_id, db)
     perm = await db.get(RoleResourcePermission, (role_id, resource_id))
     if perm:
         perm.permission_bits = body.permission_bits
     else:
-        perm = RoleResourcePermission(
-            role_id=role_id,
-            resource_id=resource_id,
-            permission_bits=body.permission_bits,
-        )
+        perm = RoleResourcePermission(role_id=role_id, resource_id=resource_id, permission_bits=body.permission_bits)
         db.add(perm)
     await db.commit()
     await db.refresh(perm)

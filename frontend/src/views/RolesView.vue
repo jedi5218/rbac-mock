@@ -13,7 +13,11 @@
           @click="selectRole(r)"
           :class="['role-item', selected?.id === r.id && 'role-item--active']"
         >
-          <div style="font-weight:500">{{ r.name }}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-weight:500">{{ r.name }}</span>
+            <span v-if="r.is_org_role" class="badge badge--sys" title="Auto-managed org-member role">org</span>
+            <span v-if="r.is_public && !r.is_org_role" class="badge badge--pub" title="Public role">pub</span>
+          </div>
           <div style="font-size:.78em;color:#888">{{ orgName(r.org_id) }}</div>
         </div>
         <div v-if="!roles.length" style="color:#888;padding:8px;font-size:.9em">No roles</div>
@@ -22,16 +26,33 @@
       <!-- ── Role detail ─────────────────────────────────── -->
       <div v-if="selected" class="card" style="padding:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h3 style="margin:0">
+          <h3 style="margin:0;display:flex;align-items:center;gap:8px">
             {{ selected.name }}
-            <span style="font-weight:normal;color:#888;font-size:.75em;margin-left:8px">{{ orgName(selected.org_id) }}</span>
+            <span v-if="selected.is_org_role" class="badge badge--sys">org-member</span>
+            <span style="font-weight:normal;color:#888;font-size:.75em">{{ orgName(selected.org_id) }}</span>
           </h3>
-          <button v-if="auth.isAdmin" @click="deleteRole(selected)" class="btn-danger-outline">Delete role</button>
+          <div style="display:flex;align-items:center;gap:10px">
+            <!-- is_public toggle (hidden for org-roles) -->
+            <label v-if="!selected.is_org_role && auth.isAdmin" class="toggle-label" title="Public roles can be used as parent by any admin">
+              <input type="checkbox" :checked="selected.is_public" @change="togglePublic" />
+              <span>{{ selected.is_public ? '🌐 Public' : '🔒 Private' }}</span>
+            </label>
+            <span v-if="selected.is_org_role" class="badge badge--pub" style="font-size:.8em">always public</span>
+            <button v-if="auth.isAdmin && !selected.is_org_role" @click="deleteRole(selected)" class="btn-danger-outline">Delete</button>
+          </div>
+        </div>
+
+        <!-- Org-role notice -->
+        <div v-if="selected.is_org_role" style="background:#fffde7;border:1px solid #f9a825;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:.875em;color:#555">
+          This is an auto-managed org-member role. Its user list mirrors all members of <strong>{{ orgName(selected.org_id) }}</strong> and updates automatically. It is always public and cannot have parent roles.
         </div>
 
         <!-- ── 1. Users with this role ───────────────────── -->
         <section class="detail-section">
-          <h4 class="section-title">Users with this role</h4>
+          <h4 class="section-title">
+            Users with this role
+            <span v-if="selected.is_org_role" style="font-size:.8em;font-weight:normal;color:#888">(auto-managed — all members of {{ orgName(selected.org_id) }})</span>
+          </h4>
           <div v-if="!roleUsers.length" class="empty-msg">No users assigned</div>
           <div v-else style="display:flex;flex-wrap:wrap;gap:6px">
             <span
@@ -66,7 +87,7 @@
         </section>
 
         <!-- ── 3. Parent roles (roles that include this role) -->
-        <section class="detail-section">
+        <section v-if="!selected.is_org_role" class="detail-section">
           <h4 class="section-title">Parent roles <span class="section-sub">(roles that include this role)</span></h4>
           <div v-if="!parents.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
@@ -146,6 +167,10 @@
         <select v-model="form.org_id" class="field">
           <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+          <input type="checkbox" v-model="form.is_public" />
+          <span>Public <small style="color:#888">(any admin can use as parent)</small></span>
+        </label>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button @click="showCreate=false" class="btn-cancel">Cancel</button>
           <button @click="createRole" class="btn-primary">Create</button>
@@ -175,7 +200,7 @@ const inheritedPerms   = ref({})   // {resource_id: bits} from included roles
 const roleUsers        = ref([])   // users assigned this role
 
 const showCreate  = ref(false)
-const form        = ref({ name: '', org_id: '' })
+const form        = ref({ name: '', org_id: '', is_public: false })
 const newIncId    = ref('')
 const newParentId = ref('')
 const err         = ref('')
@@ -243,6 +268,18 @@ async function loadDetail(id) {
   permissions.value   = perm.data
   inheritedPerms.value = inh.data
   roleUsers.value     = users.data
+}
+
+// ── Public toggle ──────────────────────────────────────────────────────────
+async function togglePublic() {
+  permErr.value = ''
+  try {
+    const res = await api.put(`/roles/${selected.value.id}`, { is_public: !selected.value.is_public })
+    // update local state
+    selected.value = res.data
+    const idx = roles.value.findIndex(r => r.id === selected.value.id)
+    if (idx !== -1) roles.value[idx] = res.data
+  } catch (e) { permErr.value = e.response?.data?.detail ?? 'Error' }
 }
 
 // ── Role CRUD ──────────────────────────────────────────────────────────────
@@ -391,6 +428,14 @@ onMounted(load)
 .btn-danger-outline { padding:4px 10px; border:1px solid #c00; border-radius:4px; cursor:pointer; color:#c00; background:#fff; font-size:.85em; }
 .btn-sm       { padding:5px 12px; border:none; border-radius:4px; cursor:pointer; font-size:.9em; }
 .btn-sm:disabled { opacity:.4; cursor:default; }
+
+/* Badges */
+.badge { padding:1px 6px; border-radius:8px; font-size:.72em; font-weight:600; letter-spacing:.02em; }
+.badge--sys { background:#fff3e0; color:#e65100; }
+.badge--pub { background:#e8f5e9; color:#2e7d32; }
+
+/* Public toggle */
+.toggle-label { display:flex; align-items:center; gap:5px; cursor:pointer; font-size:.85em; color:#444; user-select:none; }
 
 /* Modal */
 .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:100; }
