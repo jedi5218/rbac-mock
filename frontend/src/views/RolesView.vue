@@ -69,7 +69,7 @@
           <div v-if="!inclusions.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in inclusions" :key="r.id" class="chip chip--role">
-              {{ r.name }}
+              {{ formatRole(r) }}
               <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
@@ -79,7 +79,7 @@
               <option
                 v-for="r in roles.filter(r => r.id !== selected.id && !inclusions.find(i => i.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ r.name }} ({{ orgName(r.org_id) }})</option>
+              >{{ formatRole(r) }}</option>
             </select>
             <button @click="addInclusion" :disabled="!newIncId" class="btn-sm btn-primary">Add</button>
           </div>
@@ -92,7 +92,7 @@
           <div v-if="!parents.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in parents" :key="r.id" class="chip chip--parent">
-              {{ r.name }}
+              {{ formatRole(r) }}
               <button v-if="auth.isAdmin" @click="removeParent(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
@@ -102,7 +102,7 @@
               <option
                 v-for="r in parentCandidates.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ r.name }} ({{ orgName(r.org_id) }})</option>
+              >{{ formatRole(r) }}</option>
             </select>
             <button @click="addParent" :disabled="!newParentId" class="btn-sm btn-primary">Add</button>
           </div>
@@ -221,6 +221,11 @@ function bitsFor(resourceType) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function orgName(id) { return orgs.value.find(o => o.id === id)?.name ?? id }
+
+function formatRole(r) {
+  const org = orgName(r.org_id)
+  return r.is_org_role ? org : `${org}:${r.name}`
+}
 
 function directBitsFor(resourceId) {
   return permissions.value.find(p => p.resource_id === resourceId)?.permission_bits ?? 0

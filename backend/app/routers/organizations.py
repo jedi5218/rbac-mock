@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.database import get_db
-from app.models import Organization, User, Role, UserRole
+from app.models import Organization, User, Role, RoleInclusion, UserRole
 from app.schemas import OrgCreate, OrgUpdate, OrgOut
 from app.auth import get_current_user, require_superadmin
 from app.permissions import get_org_role
@@ -11,10 +11,15 @@ from app.permissions import get_org_role
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
 
-async def _create_org_role(db: AsyncSession, org_id: str) -> Role:
-    """Create the automatic @members role for a new org."""
+async def _create_org_role(db: AsyncSession, org_id: str, parent_id: str | None = None) -> Role:
+    """Create the automatic @members role for a new org and wire the inclusion chain."""
     role = Role(name="@members", org_id=org_id, is_public=True, is_org_role=True)
     db.add(role)
+    await db.flush()  # materialise role.id
+    if parent_id:
+        parent_members = await get_org_role(db, parent_id)
+        if parent_members:
+            db.add(RoleInclusion(role_id=role.id, included_role_id=parent_members.id))
     return role
 
 
@@ -33,7 +38,7 @@ async def create_org(body: OrgCreate, db: AsyncSession = Depends(get_db), _: Use
     org = Organization(name=body.name, parent_id=body.parent_id)
     db.add(org)
     await db.flush()          # materialise org.id
-    await _create_org_role(db, org.id)
+    await _create_org_role(db, org.id, parent_id=body.parent_id)
     await db.commit()
     await db.refresh(org)
     return org
@@ -49,9 +54,22 @@ async def update_org(org_id: str, body: OrgUpdate, db: AsyncSession = Depends(ge
     if body.parent_id is not None:
         if body.parent_id == org_id:
             raise HTTPException(422, "Org cannot be its own parent")
-        parent = await db.get(Organization, body.parent_id)
-        if not parent:
+        new_parent = await db.get(Organization, body.parent_id)
+        if not new_parent:
             raise HTTPException(404, "Parent org not found")
+        # Rewire @members chain: drop old parent inclusion, add new one
+        org_members = await get_org_role(db, org_id)
+        if org_members:
+            if org.parent_id:
+                old_parent_members = await get_org_role(db, org.parent_id)
+                if old_parent_members:
+                    old_inc = await db.get(RoleInclusion, (org_members.id, old_parent_members.id))
+                    if old_inc:
+                        await db.delete(old_inc)
+            new_parent_members = await get_org_role(db, body.parent_id)
+            if new_parent_members:
+                if not await db.get(RoleInclusion, (org_members.id, new_parent_members.id)):
+                    db.add(RoleInclusion(role_id=org_members.id, included_role_id=new_parent_members.id))
         org.parent_id = body.parent_id
     await db.commit()
     await db.refresh(org)
