@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.database import get_db
 from app.models import Role, RoleInclusion, RoleResourcePermission, Organization, Resource, User, UserRole
@@ -45,10 +45,18 @@ def _guard_org_role(role: Role, operation: str = "modify"):
 # ── Role CRUD ─────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=list[RoleOut])
-async def list_roles(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def list_roles(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    include_all_public: bool = Query(False),
+):
     org_ids = await visible_org_ids(db, current_user)
     if org_ids is None:
         result = await db.execute(select(Role))
+    elif include_all_public and (current_user.is_superadmin or current_user.is_org_admin):
+        result = await db.execute(
+            select(Role).where(or_(Role.org_id.in_(org_ids), Role.is_public == True))
+        )
     else:
         result = await db.execute(select(Role).where(Role.org_id.in_(org_ids)))
     return result.scalars().all()

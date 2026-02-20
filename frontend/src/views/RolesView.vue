@@ -100,7 +100,7 @@
             <select v-model="newParentId" class="select-sm">
               <option value="">— add parent role —</option>
               <option
-                v-for="r in roles.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
+                v-for="r in parentCandidates.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
                 :key="r.id" :value="r.id"
               >{{ r.name }} ({{ orgName(r.org_id) }})</option>
             </select>
@@ -189,10 +189,11 @@ import api from '../stores/api.js'
 const auth = useAuthStore()
 
 // ── State ──────────────────────────────────────────────────────────────────
-const roles      = ref([])
-const orgs       = ref([])
-const resources  = ref([])
-const selected   = ref(null)
+const roles            = ref([])
+const parentCandidates = ref([])  // all public + in-scope roles, for parent dropdown
+const orgs             = ref([])
+const resources        = ref([])
+const selected         = ref(null)
 const inclusions = ref([])   // roles this role inherits from
 const parents    = ref([])   // roles that include this role
 const permissions      = ref([])   // direct: [{role_id, resource_id, permission_bits}]
@@ -237,14 +238,16 @@ function permBitClass(resourceId, bit) {
 
 // ── Data loading ───────────────────────────────────────────────────────────
 async function load() {
-  const [r, o, res] = await Promise.all([
+  const [r, pc, o, res] = await Promise.all([
     api.get('/roles/'),
+    api.get('/roles/?include_all_public=true'),
     api.get('/orgs/'),
     api.get('/resources/'),
   ])
-  roles.value     = r.data
-  orgs.value      = o.data
-  resources.value = res.data
+  roles.value            = r.data
+  parentCandidates.value = pc.data
+  orgs.value             = o.data
+  resources.value        = res.data
   if (!form.value.org_id && o.data.length) form.value.org_id = o.data[0].id
 }
 
