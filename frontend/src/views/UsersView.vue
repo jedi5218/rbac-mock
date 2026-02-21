@@ -30,6 +30,7 @@
           <td style="padding:10px;display:flex;gap:6px">
             <button v-if="auth.isAdmin" @click="openEdit(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #1e3a5f;border-radius:3px;background:#fff;color:#1e3a5f">{{ t('common.edit') }}</button>
             <button v-if="auth.isAdmin" @click="openRoles(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #555;border-radius:3px;background:#fff;color:#555">{{ t('users.rolesBtn') }}</button>
+            <button v-if="auth.isAdmin && u.id !== auth.user?.id" @click="deleteUser(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55">{{ t('common.delete') }}</button>
           </td>
         </tr>
         <tr v-if="!users.length">
@@ -207,6 +208,14 @@ async function saveEdit() {
     editTarget.value = null
     await load()
   } catch (e) { editErr.value = e.response?.data?.detail || 'Error' }
+}
+
+async function deleteUser(user) {
+  if (!confirm(`Delete user "${user.username}"?`)) return
+  try {
+    await api.delete(`/users/${user.id}`)
+    await load()
+  } catch (e) { alert(e.response?.data?.detail || 'Error') }
 }
 
 async function openRoles(user) {

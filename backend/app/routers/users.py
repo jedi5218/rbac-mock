@@ -122,6 +122,34 @@ async def update_user(
     return user
 
 
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id == user_id:
+        raise HTTPException(403, "Cannot delete yourself")
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    is_superadmin = current_user.is_superadmin
+    is_scoped_admin = (
+        current_user.is_org_admin
+        and await org_in_subtree(db, current_user.org_id, user.org_id)
+    )
+
+    if not (is_superadmin or is_scoped_admin):
+        raise HTTPException(403, "Forbidden")
+    if is_scoped_admin and user.is_superadmin:
+        raise HTTPException(403, "Cannot delete a superadmin")
+
+    await db.delete(user)
+    await db.commit()
+    cache.invalidate_user(user_id)
+
+
 @router.get("/{user_id}/roles", response_model=list[RoleOut])
 async def list_user_roles(
     user_id: str,
