@@ -156,6 +156,26 @@ class ResolveResponse(BaseModel):
     permissions: list[EffectivePermission]
 
 
+# ── Role Tree ─────────────────────────────────────────────────────────────────
+
+class RoleTreeNode(BaseModel):
+    id: str
+    name: str
+    org_id: str
+    is_public: bool
+    is_org_role: bool
+    is_cycle: bool
+    included: list[RoleTreeNode]
+
+RoleTreeNode.model_rebuild()
+
+
+class RoleTreeResponse(BaseModel):
+    user_id: str
+    username: str
+    roles: list[RoleTreeNode]
+
+
 # ── Interactions ───────────────────────────────────────────────────────────────
 
 class RoleLink(BaseModel):

@@ -8,6 +8,7 @@
       <router-link to="/resources" style="color:#acd">{{ t('nav.resources') }}</router-link>
       <router-link to="/resolve" style="color:#acd">{{ t('nav.resolve') }}</router-link>
       <router-link v-if="auth.isAdmin" to="/interactions" style="color:#acd">{{ t('nav.interactions') }}</router-link>
+      <router-link to="/role-tree" style="color:#acd">{{ t('nav.roleTree') }}</router-link>
       <span style="margin-left:auto;font-size:0.85em">{{ auth.user?.username }}</span>
       <!-- Language switcher -->
       <div class="lang-switcher">

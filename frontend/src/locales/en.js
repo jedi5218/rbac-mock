@@ -1,7 +1,7 @@
 export default {
   nav: {
     orgs: 'Orgs', users: 'Users', roles: 'Roles', resources: 'Resources',
-    resolve: 'Resolve', interactions: 'Interactions', logout: 'Logout',
+    resolve: 'Resolve', interactions: 'Interactions', roleTree: 'Role Tree', logout: 'Logout',
   },
   common: {
     name: 'Name', org: 'Org', type: 'Type', actions: 'Actions',
@@ -79,4 +79,12 @@ export default {
     link: '{n} link', links: '{n} links',
   },
   wiki: { title: 'Wiki', notFound: 'Wiki page not found.', back: '← Back' },
+  roleTree: {
+    title: 'Role Tree',
+    selectUser: 'Select User',
+    chooseUser: '— choose user —',
+    viewBtn: 'View',
+    noRoles: 'No roles assigned',
+    direct: 'direct',
+  },
 }

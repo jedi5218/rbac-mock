@@ -7,6 +7,7 @@ import ResourcesView from '../views/ResourcesView.vue'
 import ResolveView from '../views/ResolveView.vue'
 import InteractionsView from '../views/InteractionsView.vue'
 import WikiView from '../views/WikiView.vue'
+import RoleTreeView from '../views/RoleTreeView.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -17,6 +18,7 @@ const routes = [
   { path: '/resources', component: ResourcesView, meta: { requiresAuth: true } },
   { path: '/resolve', component: ResolveView, meta: { requiresAuth: true } },
   { path: '/interactions', component: InteractionsView, meta: { requiresAuth: true } },
+  { path: '/role-tree', component: RoleTreeView, meta: { requiresAuth: true } },
   { path: '/wiki/:page', component: WikiView, meta: { requiresAuth: true } },
 ]
 

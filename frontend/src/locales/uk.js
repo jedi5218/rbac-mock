@@ -2,7 +2,7 @@ export default {
   nav: {
     orgs: 'Організації', users: 'Користувачі', roles: 'Ролі',
     resources: 'Ресурси', resolve: 'Дозвіл', interactions: 'Взаємодії',
-    logout: 'Вийти',
+    roleTree: 'Дерево ролей', logout: 'Вийти',
   },
   common: {
     name: 'Назва', org: 'Організація', type: 'Тип', actions: 'Дії',
@@ -83,4 +83,12 @@ export default {
     link: '{n} зв\'язок', links: '{n} зв\'язків',
   },
   wiki: { title: 'Вікі', notFound: 'Сторінку вікі не знайдено.', back: '← Назад' },
+  roleTree: {
+    title: 'Дерево ролей',
+    selectUser: 'Оберіть користувача',
+    chooseUser: '— оберіть користувача —',
+    viewBtn: 'Переглянути',
+    noRoles: 'Ролів не призначено',
+    direct: 'пряма',
+  },
 }

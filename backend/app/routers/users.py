@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import User, Organization, Role, UserRole
-from app.schemas import UserCreate, UserUpdate, UserOut, RoleOut
+from app.models import User, Organization, Role, UserRole, RoleInclusion
+from app.schemas import UserCreate, UserUpdate, UserOut, RoleOut, RoleTreeResponse, RoleTreeNode
 from app.auth import get_current_user, require_superadmin, require_admin, hash_password
 from app.permissions import org_in_subtree, get_org_role
 import app.cache as cache
@@ -148,6 +148,59 @@ async def delete_user(
     await db.delete(user)
     await db.commit()
     cache.invalidate_user(user_id)
+
+
+@router.get("/{user_id}/role-tree", response_model=RoleTreeResponse)
+async def get_role_tree(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    if not current_user.is_superadmin:
+        if current_user.is_org_admin:
+            if not await org_in_subtree(db, current_user.org_id, target.org_id):
+                raise HTTPException(403, "User is outside your org subtree")
+        elif current_user.id != user_id:
+            raise HTTPException(403, "You can only view your own role tree")
+
+    # Load all roles and inclusions in two queries
+    all_roles: dict[str, Role] = {
+        r.id: r for r in (await db.execute(select(Role))).scalars().all()
+    }
+    inclusions_map: dict[str, list[str]] = {}
+    for inc in (await db.execute(select(RoleInclusion))).scalars().all():
+        inclusions_map.setdefault(inc.role_id, []).append(inc.included_role_id)
+
+    # Directly assigned roles
+    direct_roles = (await db.execute(
+        select(Role).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == user_id)
+    )).scalars().all()
+
+    def build_node(role_id: str, path: frozenset[str]) -> RoleTreeNode:
+        role = all_roles[role_id]
+        is_cycle = role_id in path
+        new_path = path | {role_id}
+        children = []
+        if not is_cycle:
+            for inc_id in inclusions_map.get(role_id, []):
+                if inc_id in all_roles:
+                    children.append(build_node(inc_id, new_path))
+        return RoleTreeNode(
+            id=role.id,
+            name=role.name,
+            org_id=role.org_id,
+            is_public=role.is_public,
+            is_org_role=role.is_org_role,
+            is_cycle=is_cycle,
+            included=children,
+        )
+
+    roots = [build_node(r.id, frozenset()) for r in direct_roles]
+    return RoleTreeResponse(user_id=user_id, username=target.username, roles=roots)
 
 
 @router.get("/{user_id}/roles", response_model=list[RoleOut])
