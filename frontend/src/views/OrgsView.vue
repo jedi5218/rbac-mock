@@ -1,30 +1,33 @@
 <template>
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>Organizations</h2>
-      <button v-if="auth.isSuperadmin" @click="showCreate=true" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New Org</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 style="margin:0">{{ t('orgs.title') }}</h2>
+        <router-link to="/wiki/orgs" class="help-link" :title="t('common.help')">?</router-link>
+      </div>
+      <button v-if="auth.isSuperadmin" @click="showCreate=true" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">{{ t('orgs.new') }}</button>
     </div>
 
     <!-- Tree display -->
     <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
       <OrgNode v-for="o in roots" :key="o.id" :org="o" :all-orgs="orgs" :depth="0" @edit="startEdit" @delete="deleteOrg" :is-superadmin="auth.isSuperadmin" />
-      <p v-if="!orgs.length" style="color:#888">No organizations</p>
+      <p v-if="!orgs.length" style="color:#888">{{ t('orgs.noOrgs') }}</p>
     </div>
 
     <!-- Create modal -->
     <div v-if="showCreate" class="modal-backdrop">
       <div class="modal">
-        <h3>Create Organization</h3>
-        <label>Name</label>
+        <h3>{{ t('orgs.createTitle') }}</h3>
+        <label>{{ t('common.name') }}</label>
         <input v-model="form.name" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px" />
-        <label>Parent Org (optional)</label>
+        <label>{{ t('orgs.parent') }}</label>
         <select v-model="form.parent_id" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px">
-          <option value="">— none (root) —</option>
+          <option value="">{{ t('orgs.noneRoot') }}</option>
           <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button @click="showCreate=false" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">Cancel</button>
-          <button @click="createOrg" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">Create</button>
+          <button @click="showCreate=false" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">{{ t('common.cancel') }}</button>
+          <button @click="createOrg" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">{{ t('common.create') }}</button>
         </div>
         <p v-if="err" style="color:red;margin-top:8px">{{ err }}</p>
       </div>
@@ -33,17 +36,17 @@
     <!-- Edit modal -->
     <div v-if="editTarget" class="modal-backdrop">
       <div class="modal">
-        <h3>Edit Organization</h3>
-        <label>Name</label>
+        <h3>{{ t('orgs.editTitle') }}</h3>
+        <label>{{ t('common.name') }}</label>
         <input v-model="editForm.name" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px" />
-        <label>Parent Org (optional)</label>
+        <label>{{ t('orgs.parent') }}</label>
         <select v-model="editForm.parent_id" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px">
-          <option value="">— none (root) —</option>
+          <option value="">{{ t('orgs.noneRoot') }}</option>
           <option v-for="o in orgs.filter(x => x.id !== editTarget.id)" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button @click="editTarget=null" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">Cancel</button>
-          <button @click="saveEdit" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+          <button @click="editTarget=null" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">{{ t('common.cancel') }}</button>
+          <button @click="saveEdit" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">{{ t('common.save') }}</button>
         </div>
         <p v-if="err" style="color:red;margin-top:8px">{{ err }}</p>
       </div>
@@ -53,9 +56,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const orgs = ref([])
 const showCreate = ref(false)
@@ -156,4 +161,9 @@ export default { components: { OrgNode } }
   background: #fff; border-radius: 8px; padding: 24px; width: 400px; max-width: 95vw;
 }
 .modal h3 { margin-bottom: 16px; }
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; background: #1e3a5f; color: #fff;
+  font-size: .75em; font-weight: 700; text-decoration: none; flex-shrink: 0;
+}
 </style>

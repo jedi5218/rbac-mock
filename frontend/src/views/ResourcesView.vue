@@ -1,17 +1,20 @@
 <template>
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>Resources</h2>
-      <button v-if="auth.isAdmin" @click="openCreate" class="btn-primary">+ New Resource</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 style="margin:0">{{ t('resources.title') }}</h2>
+        <router-link to="/wiki/resources" class="help-link" :title="t('common.help')">?</router-link>
+      </div>
+      <button v-if="auth.isAdmin" @click="openCreate" class="btn-primary">{{ t('resources.new') }}</button>
     </div>
 
     <table class="main-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Org</th>
-          <th v-if="auth.isAdmin">Actions</th>
+          <th>{{ t('common.name') }}</th>
+          <th>{{ t('common.type') }}</th>
+          <th>{{ t('common.org') }}</th>
+          <th v-if="auth.isAdmin">{{ t('common.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -20,12 +23,12 @@
           <td><span :class="['type-badge', r.resource_type === 'document' ? 'type-badge--doc' : 'type-badge--vid']">{{ r.resource_type }}</span></td>
           <td>{{ orgName(r.org_id) }}</td>
           <td v-if="auth.isAdmin" style="display:flex;gap:6px;padding:8px 10px">
-            <button @click="openEdit(r)" class="btn-sm-outline">Edit</button>
-            <button @click="deleteResource(r)" class="btn-sm-danger">Delete</button>
+            <button @click="openEdit(r)" class="btn-sm-outline">{{ t('common.edit') }}</button>
+            <button @click="deleteResource(r)" class="btn-sm-danger">{{ t('common.delete') }}</button>
           </td>
         </tr>
         <tr v-if="!resources.length">
-          <td :colspan="auth.isAdmin ? 4 : 3" class="empty-cell">No resources</td>
+          <td :colspan="auth.isAdmin ? 4 : 3" class="empty-cell">{{ t('resources.noResources') }}</td>
         </tr>
       </tbody>
     </table>
@@ -33,28 +36,26 @@
     <!-- Create / Edit modal -->
     <div v-if="showModal" class="modal-backdrop">
       <div class="modal">
-        <h3>{{ editTarget ? 'Edit Resource' : 'Create Resource' }}</h3>
+        <h3>{{ editTarget ? t('resources.editTitle') : t('resources.createTitle') }}</h3>
 
-        <label>Name</label>
+        <label>{{ t('common.name') }}</label>
         <input v-model="form.name" class="field" />
 
-        <label>Type</label>
+        <label>{{ t('common.type') }}</label>
         <select v-model="form.resource_type" class="field" :disabled="!!editTarget">
           <option value="document">document</option>
           <option value="video">video</option>
         </select>
 
-        <label>Org</label>
+        <label>{{ t('common.org') }}</label>
         <select v-model="form.org_id" class="field" :disabled="!!editTarget">
           <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
 
         <!-- Role permissions for this resource -->
         <div v-if="orgRoles.length" style="margin-top:8px;margin-bottom:14px">
-          <div style="font-size:.85em;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Role permissions</div>
-          <div class="perm-legend">
-            Click bits to toggle. Only roles in this resource's org are shown.
-          </div>
+          <div style="font-size:.85em;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">{{ t('resources.rolePermsTitle') }}</div>
+          <div class="perm-legend">{{ t('resources.rolePermsHint') }}</div>
           <table class="perm-table">
             <thead>
               <tr><th>Role</th><th>Permissions</th></tr>
@@ -74,12 +75,12 @@
             </tbody>
           </table>
         </div>
-        <div v-else style="font-size:.85em;color:#aaa;margin-bottom:14px">No non-system roles in this org yet.</div>
+        <div v-else style="font-size:.85em;color:#aaa;margin-bottom:14px">{{ t('resources.noRoles') }}</div>
 
         <p v-if="err" class="err-msg">{{ err }}</p>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button @click="showModal=false" class="btn-cancel">Cancel</button>
-          <button @click="saveModal" class="btn-primary">{{ editTarget ? 'Save' : 'Create' }}</button>
+          <button @click="showModal=false" class="btn-cancel">{{ t('common.cancel') }}</button>
+          <button @click="saveModal" class="btn-primary">{{ editTarget ? t('common.save') : t('common.create') }}</button>
         </div>
       </div>
     </div>
@@ -88,8 +89,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
+
+const { t } = useI18n()
 
 const auth = useAuthStore()
 const resources = ref([])
@@ -239,4 +243,9 @@ onMounted(load)
 .btn-cancel   { padding:6px 14px; border:1px solid #ccc; border-radius:4px; cursor:pointer; background:#fff; }
 .btn-sm-outline { padding:2px 8px; font-size:.85em; cursor:pointer; border:1px solid #1e3a5f; border-radius:3px; background:#fff; color:#1e3a5f; }
 .btn-sm-danger  { padding:2px 8px; font-size:.85em; cursor:pointer; border:1px solid #e55; border-radius:3px; background:#fff; color:#e55; }
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; background: #1e3a5f; color: #fff;
+  font-size: .75em; font-weight: 700; text-decoration: none; flex-shrink: 0;
+}
 </style>

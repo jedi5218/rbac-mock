@@ -1,8 +1,11 @@
 <template>
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>Roles</h2>
-      <button v-if="auth.isAdmin" @click="showCreate=true" class="btn-primary">+ New Role</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 style="margin:0">{{ t('roles.title') }}</h2>
+        <router-link to="/wiki/roles" class="help-link" :title="t('common.help')">?</router-link>
+      </div>
+      <button v-if="auth.isAdmin" @click="showCreate=true" class="btn-primary">{{ t('roles.new') }}</button>
     </div>
 
     <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;align-items:start">
@@ -20,7 +23,7 @@
           </div>
           <div style="font-size:.78em;color:#888">{{ orgName(r.org_id) }}</div>
         </div>
-        <div v-if="!roles.length" style="color:#888;padding:8px;font-size:.9em">No roles</div>
+        <div v-if="!roles.length" style="color:#888;padding:8px;font-size:.9em">{{ t('roles.noRoles') }}</div>
       </div>
 
       <!-- ── Role detail ─────────────────────────────────── -->
@@ -28,32 +31,34 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
           <h3 style="margin:0;display:flex;align-items:center;gap:8px">
             {{ selected.name }}
-            <span v-if="selected.is_org_role" class="badge badge--sys">org-member</span>
+            <span v-if="selected.is_org_role" class="badge badge--sys">{{ t('roles.orgMember') }}</span>
             <span style="font-weight:normal;color:#888;font-size:.75em">{{ orgName(selected.org_id) }}</span>
           </h3>
           <div style="display:flex;align-items:center;gap:10px">
-            <!-- is_public toggle (hidden for org-roles) -->
-            <label v-if="!selected.is_org_role && auth.isAdmin" class="toggle-label" title="Public roles can be used as parent by any admin">
-              <input type="checkbox" :checked="selected.is_public" @change="togglePublic" />
-              <span>{{ selected.is_public ? '🌐 Public' : '🔒 Private' }}</span>
-            </label>
-            <span v-if="selected.is_org_role" class="badge badge--pub" style="font-size:.8em">always public</span>
-            <button v-if="auth.isAdmin && !selected.is_org_role" @click="deleteRole(selected)" class="btn-danger-outline">Delete</button>
+            <!-- is_public pill toggle (hidden for org-roles) -->
+            <div v-if="!selected.is_org_role && auth.isAdmin" class="pill-toggle" :title="t('roles.publicHint')" @click="togglePublic">
+              <div :class="['pill-track', selected.is_public && 'pill-track--on']">
+                <div class="pill-thumb"></div>
+              </div>
+              <span class="pill-label">{{ selected.is_public ? t('roles.public') : t('roles.private') }}</span>
+            </div>
+            <span v-if="selected.is_org_role" class="badge badge--pub" style="font-size:.8em">{{ t('roles.alwaysPublic') }}</span>
+            <button v-if="auth.isAdmin && !selected.is_org_role" @click="deleteRole(selected)" class="btn-danger-outline">{{ t('common.delete') }}</button>
           </div>
         </div>
 
         <!-- Org-role notice -->
         <div v-if="selected.is_org_role" style="background:#fffde7;border:1px solid #f9a825;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:.875em;color:#555">
-          This is an auto-managed org-member role. Its user list mirrors all members of <strong>{{ orgName(selected.org_id) }}</strong> and updates automatically. It is always public and cannot have parent roles.
+          {{ t('roles.orgMemberNotice', { org: orgName(selected.org_id) }) }}
         </div>
 
         <!-- ── 1. Users with this role ───────────────────── -->
         <section class="detail-section">
           <h4 class="section-title">
-            Users with this role
-            <span v-if="selected.is_org_role" style="font-size:.8em;font-weight:normal;color:#888">(auto-managed — all members of {{ orgName(selected.org_id) }})</span>
+            {{ t('roles.usersTitle') }}
+            <span v-if="selected.is_org_role" style="font-size:.8em;font-weight:normal;color:#888">{{ t('roles.autoManaged', { org: orgName(selected.org_id) }) }}</span>
           </h4>
-          <div v-if="!roleUsers.length" class="empty-msg">No users assigned</div>
+          <div v-if="!roleUsers.length" class="empty-msg">{{ t('roles.noUsers') }}</div>
           <div v-else style="display:flex;flex-wrap:wrap;gap:6px">
             <span
               v-for="u in roleUsers" :key="u.id"
@@ -65,61 +70,61 @@
 
         <!-- ── 2. Included roles (this role inherits from) ── -->
         <section class="detail-section">
-          <h4 class="section-title">Included roles <span class="section-sub">(this role inherits permissions from)</span></h4>
+          <h4 class="section-title">{{ t('roles.includedTitle') }} <span class="section-sub">{{ t('roles.includedSub') }}</span></h4>
           <div v-if="!inclusions.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in inclusions" :key="r.id" class="chip chip--role">
-              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">foreign</span>
+              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">{{ t('roles.foreign') }}</span>
               <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
           <div v-if="auth.isAdmin" style="display:flex;gap:8px">
             <select v-model="newIncId" class="select-sm">
-              <option value="">— add included role —</option>
+              <option value="">{{ t('roles.addIncluded') }}</option>
               <option
                 v-for="r in roles.filter(r => r.id !== selected.id && !inclusions.find(i => i.id === r.id))"
                 :key="r.id" :value="r.id"
               >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
             </select>
-            <button @click="addInclusion" :disabled="!newIncId" class="btn-sm btn-primary">Add</button>
+            <button @click="addInclusion" :disabled="!newIncId" class="btn-sm btn-primary">{{ t('common.add') }}</button>
           </div>
           <p v-if="incErr" class="err-msg">{{ incErr }}</p>
         </section>
 
         <!-- ── 3. Parent roles (roles that include this role) -->
         <section v-if="!selected.is_org_role" class="detail-section">
-          <h4 class="section-title">Parent roles <span class="section-sub">(roles that include this role)</span></h4>
+          <h4 class="section-title">{{ t('roles.parentsTitle') }} <span class="section-sub">{{ t('roles.parentsSub') }}</span></h4>
           <div v-if="!parents.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in parents" :key="r.id" class="chip chip--parent">
-              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">foreign</span>
+              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">{{ t('roles.foreign') }}</span>
               <button v-if="auth.isAdmin" @click="removeParent(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
           <div v-if="auth.isAdmin" style="display:flex;gap:8px">
             <select v-model="newParentId" class="select-sm">
-              <option value="">— add parent role —</option>
+              <option value="">{{ t('roles.addParent') }}</option>
               <option
                 v-for="r in parentCandidates.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
                 :key="r.id" :value="r.id"
               >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
             </select>
-            <button @click="addParent" :disabled="!newParentId" class="btn-sm btn-primary">Add</button>
+            <button @click="addParent" :disabled="!newParentId" class="btn-sm btn-primary">{{ t('common.add') }}</button>
           </div>
           <p v-if="parentErr" class="err-msg">{{ parentErr }}</p>
         </section>
 
         <!-- ── 4. Resource permissions (tri-state toggles) ── -->
         <section class="detail-section" style="border-bottom:none">
-          <h4 class="section-title">Resource permissions</h4>
+          <h4 class="section-title">{{ t('roles.permissionsTitle') }}</h4>
 
           <div class="perm-legend">
-            <span class="perm-bit perm-bit--direct">direct</span> granted directly on this role &nbsp;·&nbsp;
-            <span class="perm-bit perm-bit--inherited">inherited</span> from an included role &nbsp;·&nbsp;
-            <span class="perm-bit perm-bit--off">off</span> not granted
+            <span class="perm-bit perm-bit--direct">{{ t('roles.permDirect') }}</span> {{ t('roles.permLegendDirect') }} &nbsp;·&nbsp;
+            <span class="perm-bit perm-bit--inherited">{{ t('roles.permInherited') }}</span> {{ t('roles.permLegendInherited') }} &nbsp;·&nbsp;
+            <span class="perm-bit perm-bit--off">{{ t('roles.permOff') }}</span> {{ t('roles.permLegendOff') }}
           </div>
 
-          <div v-if="!roleResources.length" class="empty-msg">No resources in this role's org</div>
+          <div v-if="!roleResources.length" class="empty-msg">{{ t('roles.noResources') }}</div>
           <table v-else class="perm-table">
             <thead>
               <tr>
@@ -153,27 +158,27 @@
       </div>
 
       <div v-else class="card" style="padding:40px;text-align:center;color:#aaa">
-        Select a role to view details
+        {{ t('roles.selectRole') }}
       </div>
     </div>
 
     <!-- Create role modal -->
     <div v-if="showCreate" class="modal-backdrop">
       <div class="modal">
-        <h3>Create Role</h3>
-        <label>Name</label>
-        <input v-model="form.name" class="field" placeholder="Role name" />
-        <label>Org</label>
+        <h3>{{ t('roles.createTitle') }}</h3>
+        <label>{{ t('common.name') }}</label>
+        <input v-model="form.name" class="field" />
+        <label>{{ t('common.org') }}</label>
         <select v-model="form.org_id" class="field">
           <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
           <input type="checkbox" v-model="form.is_public" />
-          <span>Public <small style="color:#888">(any admin can use as parent)</small></span>
+          <span>{{ t('roles.public') }} <small style="color:#888">({{ t('roles.publicHint') }})</small></span>
         </label>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button @click="showCreate=false" class="btn-cancel">Cancel</button>
-          <button @click="createRole" class="btn-primary">Create</button>
+          <button @click="showCreate=false" class="btn-cancel">{{ t('common.cancel') }}</button>
+          <button @click="createRole" class="btn-primary">{{ t('common.create') }}</button>
         </div>
         <p v-if="err" class="err-msg">{{ err }}</p>
       </div>
@@ -183,9 +188,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -475,8 +482,27 @@ onMounted(load)
 .badge--pub     { background:#e8f5e9; color:#2e7d32; }
 .badge--foreign { background:#fce4ec; color:#880e4f; margin-left:4px; }
 
-/* Public toggle */
-.toggle-label { display:flex; align-items:center; gap:5px; cursor:pointer; font-size:.85em; color:#444; user-select:none; }
+/* Public pill toggle */
+.pill-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+.pill-track {
+  position:relative; width:38px; height:21px; background:#ccc;
+  border-radius:11px; transition:background .2s; flex-shrink:0;
+}
+.pill-track--on { background:#2e7d32; }
+.pill-thumb {
+  position:absolute; top:2.5px; left:2.5px; width:16px; height:16px;
+  background:#fff; border-radius:50%; transition:transform .2s;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+}
+.pill-track--on .pill-thumb { transform:translateX(17px); }
+.pill-label { font-size:.85em; color:#444; }
+
+/* Help link */
+.help-link {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:50%; background:#1e3a5f; color:#fff;
+  font-size:.75em; font-weight:700; text-decoration:none; flex-shrink:0;
+}
 
 /* Modal */
 .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:100; }

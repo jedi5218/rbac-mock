@@ -1,12 +1,13 @@
 <template>
   <div>
-    <h2 style="margin-bottom:4px">Org Interactions</h2>
-    <p style="color:#666;font-size:.9em;margin-bottom:20px">
-      Cross-org role relationships within your admin scope. Parent/child orgs are excluded — only lateral interactions are shown.
-    </p>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <h2 style="margin:0">{{ t('interactions.title') }}</h2>
+      <router-link to="/wiki/interactions" class="help-link" :title="t('common.help')">?</router-link>
+    </div>
+    <p style="color:#666;font-size:.9em;margin-bottom:20px">{{ t('interactions.subtitle') }}</p>
 
-    <div v-if="loading" style="color:#888;padding:20px">Loading…</div>
-    <div v-else-if="!tree.length" style="color:#888">No orgs in scope.</div>
+    <div v-if="loading" style="color:#888;padding:20px">{{ t('common.loading') }}</div>
+    <div v-else-if="!tree.length" style="color:#888">{{ t('interactions.noOrgs') }}</div>
 
     <div v-else>
       <OrgInteractionNode
@@ -20,9 +21,20 @@
   </div>
 </template>
 
+<style scoped>
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; background: #1e3a5f; color: #fff;
+  font-size: .75em; font-weight: 700; text-decoration: none; flex-shrink: 0;
+}
+</style>
+
 <script setup>
 import { ref, computed, onMounted, defineComponent, h } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '../stores/api.js'
+
+const { t } = useI18n()
 
 const tree    = ref([])
 const loading = ref(true)
