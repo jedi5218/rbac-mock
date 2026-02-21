@@ -69,7 +69,7 @@
           <div v-if="!inclusions.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in inclusions" :key="r.id" class="chip chip--role">
-              {{ formatRole(r) }}
+              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">foreign</span>
               <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
@@ -79,7 +79,7 @@
               <option
                 v-for="r in roles.filter(r => r.id !== selected.id && !inclusions.find(i => i.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ formatRole(r) }}</option>
+              >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
             </select>
             <button @click="addInclusion" :disabled="!newIncId" class="btn-sm btn-primary">Add</button>
           </div>
@@ -92,7 +92,7 @@
           <div v-if="!parents.length" class="empty-msg">None</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span v-for="r in parents" :key="r.id" class="chip chip--parent">
-              {{ formatRole(r) }}
+              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">foreign</span>
               <button v-if="auth.isAdmin" @click="removeParent(r.id)" class="chip-remove" title="Remove">×</button>
             </span>
           </div>
@@ -102,7 +102,7 @@
               <option
                 v-for="r in parentCandidates.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ formatRole(r) }}</option>
+              >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
             </select>
             <button @click="addParent" :disabled="!newParentId" class="btn-sm btn-primary">Add</button>
           </div>
@@ -225,6 +225,33 @@ function orgName(id) { return orgs.value.find(o => o.id === id)?.name ?? id }
 function formatRole(r) {
   const org = orgName(r.org_id)
   return r.is_org_role ? org : `${org}:${r.name}`
+}
+
+// Set of org IDs that are in the current user's own-org + ancestors + descendants.
+// null means superadmin (nothing is foreign).
+const hierarchyOrgIds = computed(() => {
+  if (!auth.user || auth.user.is_superadmin) return null
+  const all = orgs.value
+  const inScope = new Set()
+  // Own org + walk up to ancestors
+  let cur = all.find(o => o.id === auth.user.org_id)
+  while (cur) {
+    inScope.add(cur.id)
+    cur = cur.parent_id ? all.find(o => o.id === cur.parent_id) : null
+  }
+  // Descendants: BFS
+  const queue = [auth.user.org_id]
+  while (queue.length) {
+    const pid = queue.shift()
+    for (const c of all.filter(o => o.parent_id === pid)) {
+      if (!inScope.has(c.id)) { inScope.add(c.id); queue.push(c.id) }
+    }
+  }
+  return inScope
+})
+
+function isForeign(role) {
+  return hierarchyOrgIds.value !== null && !hierarchyOrgIds.value.has(role.org_id)
 }
 
 function directBitsFor(resourceId) {
@@ -439,8 +466,9 @@ onMounted(load)
 
 /* Badges */
 .badge { padding:1px 6px; border-radius:8px; font-size:.72em; font-weight:600; letter-spacing:.02em; }
-.badge--sys { background:#fff3e0; color:#e65100; }
-.badge--pub { background:#e8f5e9; color:#2e7d32; }
+.badge--sys     { background:#fff3e0; color:#e65100; }
+.badge--pub     { background:#e8f5e9; color:#2e7d32; }
+.badge--foreign { background:#fce4ec; color:#880e4f; margin-left:4px; }
 
 /* Public toggle */
 .toggle-label { display:flex; align-items:center; gap:5px; cursor:pointer; font-size:.85em; color:#444; user-select:none; }
