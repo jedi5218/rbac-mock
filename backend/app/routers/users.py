@@ -79,11 +79,19 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.is_superadmin and current_user.id != user_id:
-        raise HTTPException(403, "Forbidden")
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
+
+    is_self = current_user.id == user_id
+    is_superadmin = current_user.is_superadmin
+    is_scoped_admin = (
+        current_user.is_org_admin
+        and await org_in_subtree(db, current_user.org_id, user.org_id)
+    )
+
+    if not (is_self or is_superadmin or is_scoped_admin):
+        raise HTTPException(403, "Forbidden")
 
     if body.username is not None:
         user.username = body.username
@@ -92,18 +100,21 @@ async def update_user(
     if body.password is not None:
         user.password_hash = hash_password(body.password)
 
-    if body.org_id is not None and current_user.is_superadmin and body.org_id != user.org_id:
-        new_org = await db.get(Organization, body.org_id)
-        if not new_org:
-            raise HTTPException(404, "Org not found")
-        old_org_id = user.org_id
-        user.org_id = body.org_id
-        await _sync_org_role(db, user_id, old_org_id, body.org_id)
-
-    if body.is_superadmin is not None and current_user.is_superadmin:
-        user.is_superadmin = body.is_superadmin
-    if body.is_org_admin is not None and current_user.is_superadmin:
-        user.is_org_admin = body.is_org_admin
+    if is_superadmin:
+        if body.org_id is not None and body.org_id != user.org_id:
+            new_org = await db.get(Organization, body.org_id)
+            if not new_org:
+                raise HTTPException(404, "Org not found")
+            old_org_id = user.org_id
+            user.org_id = body.org_id
+            await _sync_org_role(db, user_id, old_org_id, body.org_id)
+        if body.is_superadmin is not None:
+            user.is_superadmin = body.is_superadmin
+        if body.is_org_admin is not None:
+            user.is_org_admin = body.is_org_admin
+    elif is_scoped_admin:
+        if body.is_org_admin is not None:
+            user.is_org_admin = body.is_org_admin
 
     await db.commit()
     await db.refresh(user)

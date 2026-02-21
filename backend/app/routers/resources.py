@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import Resource, Organization, User
-from app.schemas import ResourceCreate, ResourceUpdate, ResourceOut
+from app.models import Resource, Organization, User, RoleResourcePermission
+from app.schemas import ResourceCreate, ResourceUpdate, ResourceOut, PermissionOut
 from app.auth import get_current_user, require_admin
 from app.permissions import org_in_subtree, visible_org_ids
 
@@ -66,6 +66,20 @@ async def update_resource(
     await db.commit()
     await db.refresh(resource)
     return resource
+
+
+@router.get("/{resource_id}/permissions", response_model=list[PermissionOut])
+async def list_resource_permissions(
+    resource_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    if not await db.get(Resource, resource_id):
+        raise HTTPException(404, "Resource not found")
+    result = await db.execute(
+        select(RoleResourcePermission).where(RoleResourcePermission.resource_id == resource_id)
+    )
+    return result.scalars().all()
 
 
 @router.delete("/{resource_id}", status_code=204)

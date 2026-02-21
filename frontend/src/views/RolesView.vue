@@ -119,7 +119,7 @@
             <span class="perm-bit perm-bit--off">off</span> not granted
           </div>
 
-          <div v-if="!resources.length" class="empty-msg">No resources visible in your org scope</div>
+          <div v-if="!roleResources.length" class="empty-msg">No resources in this role's org</div>
           <table v-else class="perm-table">
             <thead>
               <tr>
@@ -129,7 +129,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="res in resources" :key="res.id">
+              <tr v-for="res in roleResources" :key="res.id">
                 <td>{{ res.name }}</td>
                 <td>
                   <span :class="['type-badge', res.resource_type === 'document' ? 'type-badge--doc' : 'type-badge--vid']">
@@ -182,7 +182,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
 
@@ -261,6 +261,11 @@ function directBitsFor(resourceId) {
 function inheritedBitsFor(resourceId) {
   return inheritedPerms.value[resourceId] ?? 0
 }
+
+// Resources that belong to the selected role's own org
+const roleResources = computed(() =>
+  selected.value ? resources.value.filter(r => r.org_id === selected.value.org_id) : []
+)
 
 function permBitClass(resourceId, bit) {
   if (directBitsFor(resourceId) & bit)   return 'perm-bit--direct'
