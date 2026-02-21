@@ -7,6 +7,7 @@ from app.models import User, Organization, Role, UserRole
 from app.schemas import UserCreate, UserUpdate, UserOut, RoleOut
 from app.auth import get_current_user, require_superadmin, require_admin, hash_password
 from app.permissions import org_in_subtree, get_org_role
+import app.cache as cache
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -161,6 +162,7 @@ async def assign_role(
     if not await db.get(UserRole, (user_id, role_id)):
         db.add(UserRole(user_id=user_id, role_id=role_id))
         await db.commit()
+        cache.invalidate_user(user_id)
 
 
 @router.delete("/{user_id}/roles/{role_id}", status_code=204)
@@ -185,3 +187,4 @@ async def revoke_role(
     if ur:
         await db.delete(ur)
         await db.commit()
+        cache.invalidate_user(user_id)

@@ -6,6 +6,7 @@ from app.models import User
 from app.schemas import ResolveResponse
 from app.auth import get_current_user
 from app.permissions import get_effective_permissions, org_in_subtree
+import app.cache as cache
 
 router = APIRouter(prefix="/resolve", tags=["resolve"])
 
@@ -27,5 +28,10 @@ async def resolve_user(
         elif current_user.id != user_id:
             raise HTTPException(403, "You can only resolve your own permissions")
 
+    cached = cache.get_resolve(user_id)
+    if cached is not None:
+        return ResolveResponse(user_id=user_id, permissions=cached)
+
     perms = await get_effective_permissions(db, user_id)
+    cache.set_resolve(user_id, perms)
     return ResolveResponse(user_id=user_id, permissions=perms)

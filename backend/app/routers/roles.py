@@ -10,9 +10,10 @@ from app.schemas import (
 )
 from app.auth import get_current_user, require_admin
 from app.permissions import (
-    check_inclusion_cycle, org_in_subtree, visible_org_ids,
+    org_in_subtree, visible_org_ids,
     get_role_inherited_permissions,
 )
+import app.cache as cache
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -171,10 +172,10 @@ async def add_inclusion(
     # Public included roles can be used by anyone; private ones require scope
     await _can_use_role(current_user, included, db)
 
-    await check_inclusion_cycle(db, role_id, body.included_role_id)
     if not await db.get(RoleInclusion, (role_id, body.included_role_id)):
         db.add(RoleInclusion(role_id=role_id, included_role_id=body.included_role_id))
         await db.commit()
+        cache.invalidate_all()
 
 
 @router.delete("/{role_id}/inclusions/{included_role_id}", status_code=204)
@@ -192,6 +193,7 @@ async def remove_inclusion(
     if inc:
         await db.delete(inc)
         await db.commit()
+        cache.invalidate_all()
 
 
 # ── Parent roles (roles that include this role) ───────────────────────────────
@@ -235,10 +237,10 @@ async def add_parent(
     # The parent role must be accessible (public OR within admin's scope)
     await _can_use_role(current_user, parent, db)
 
-    await check_inclusion_cycle(db, body.parent_role_id, role_id)
     if not await db.get(RoleInclusion, (body.parent_role_id, role_id)):
         db.add(RoleInclusion(role_id=body.parent_role_id, included_role_id=role_id))
         await db.commit()
+        cache.invalidate_all()
 
 
 @router.delete("/{role_id}/parents/{parent_role_id}", status_code=204)
@@ -260,6 +262,7 @@ async def remove_parent(
     if inc:
         await db.delete(inc)
         await db.commit()
+        cache.invalidate_all()
 
 
 # ── Permissions ───────────────────────────────────────────────────────────────
@@ -310,6 +313,7 @@ async def set_permission(
         perm = RoleResourcePermission(role_id=role_id, resource_id=resource_id, permission_bits=body.permission_bits)
         db.add(perm)
     await db.commit()
+    cache.invalidate_all()
     await db.refresh(perm)
     return perm
 
@@ -329,3 +333,4 @@ async def remove_permission(
     if perm:
         await db.delete(perm)
         await db.commit()
+        cache.invalidate_all()
