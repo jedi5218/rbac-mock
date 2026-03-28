@@ -29,6 +29,60 @@ docker compose up --build
 | document | read | write | — |
 | video | view | comment | stream |
 
+## Fly.io Deployment
+
+Live demo: **https://rbac-mock.fly.dev/**
+
+### First-Time Setup
+
+```bash
+# 1. Install flyctl and authenticate
+brew install flyctl
+fly auth login
+
+# 2. Create the app
+fly apps create rbac-mock
+
+# 3. Create a Fly Postgres database (unmanaged, single node)
+fly postgres create --name rbac-mock-db --region iad \
+  --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
+
+# 4. Attach the database to the app
+fly postgres attach rbac-mock-db --app rbac-mock
+```
+
+> **Important: Fix DATABASE_URL.** The `fly postgres attach` command sets `DATABASE_URL` with a `postgres://` scheme and `?sslmode=disable`, but asyncpg requires `postgresql+asyncpg://` and rejects `sslmode`. You must override it:
+>
+> ```bash
+> # Find connection details (look for user/password in output)
+> fly ssh console --app rbac-mock-db -C "env"
+>
+> # Set the corrected URL
+> fly secrets set DATABASE_URL="postgresql+asyncpg://rbac_mock:<password>@top2.nearest.of.rbac-mock-db.internal:5432/rbac_mock?ssl=disable" --app rbac-mock
+> ```
+
+```bash
+# 5. Generate a secret key for JWT signing
+fly secrets set SECRET_KEY="$(openssl rand -hex 32)" --app rbac-mock
+
+# 6. Deploy
+fly deploy
+```
+
+### Subsequent Deploys
+
+```bash
+fly deploy
+```
+
+### Useful Commands
+
+```bash
+fly logs --app rbac-mock      # Stream application logs
+fly status --app rbac-mock    # Check machine state and health
+fly open --app rbac-mock      # Open the app in your browser
+```
+
 ## Verification Steps
 
 1. `docker compose up` — all three services start clean
@@ -43,8 +97,13 @@ docker compose up --build
 ## Project Structure
 
 ```
-mock-rbms/
+rbac-mock/
 ├── docker-compose.yml
+├── fly.toml                    # Fly.io app configuration
+├── Dockerfile.fly              # Production multi-stage build
+├── nginx.conf                  # nginx: SPA serving + API proxy
+├── supervisord.conf            # Process manager for nginx + uvicorn
+├── start.sh                    # Entrypoint: migrations + supervisord
 ├── backend/                    # FastAPI + SQLAlchemy async + asyncpg
 │   ├── Dockerfile
 │   ├── pyproject.toml
@@ -55,12 +114,16 @@ mock-rbms/
 │       ├── models.py          # SQLAlchemy ORM (7 tables)
 │       ├── schemas.py         # Pydantic v2
 │       ├── auth.py            # JWT + bcrypt
+│       ├── cache.py           # In-memory permission cache
 │       ├── permissions.py     # Cycle check, effective perms, admin scope
-│       └── routers/           # auth, orgs, users, resources, roles, resolve
-└── frontend/                  # Vue 3 + Vite + Pinia
+│       └── routers/           # auth, orgs, users, resources, roles, resolve, interactions
+└── frontend/                  # Vue 3 + Vite + Pinia + vue-i18n
     ├── Dockerfile
     ├── src/
+    │   ├── i18n.js            # Internationalization setup (en/uk)
+    │   ├── locales/           # en.json, uk.json
     │   ├── stores/            # Pinia auth store + Axios instance
-    │   ├── router/            # Vue Router
-    │   └── views/             # Login, Orgs, Users, Roles, Resources, Resolve
+    │   ├── router/            # Vue Router with auth guard
+    │   └── views/             # Login, Orgs, Users, Roles, Resources, Resolve,
+    │                          # Interactions, RoleTree, Wiki
 ```
