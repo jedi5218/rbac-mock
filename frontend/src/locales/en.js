@@ -42,6 +42,7 @@ export default {
     selectRole: 'Select a role to view details',
     usersTitle: 'Users with this role',
     autoManaged: '(auto-managed — all members of {org})',
+    addUser: '— add user —',
     noUsers: 'No users assigned',
     includedTitle: 'Included roles', includedSub: '(this role inherits permissions from)',
     addIncluded: '— add included role —',

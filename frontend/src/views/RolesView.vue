@@ -32,11 +32,24 @@
       <!-- ── Role detail ─────────────────────────────────── -->
       <div v-if="selected" class="card" style="padding:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h3 style="margin:0;display:flex;align-items:center;gap:8px">
+          <h3 v-if="!renaming" style="margin:0;display:flex;align-items:center;gap:8px">
             {{ roleDisplayName(selected) }}
             <span style="font-weight:normal;color:#888;font-size:.75em">{{ orgName(selected.org_id) }}</span>
+            <button v-if="auth.isAdmin && !selected.is_org_role" @click="startRename" class="rename-btn" title="Rename">&#9998;</button>
           </h3>
-          <div style="display:flex;align-items:center;gap:10px">
+          <div v-else style="display:flex;align-items:center;gap:8px;flex:1">
+            <input
+              v-model="renameValue"
+              @keydown.enter="saveRename"
+              @keydown.escape="renaming=false"
+              ref="renameInput"
+              class="field"
+              style="margin:0;font-size:1.1em;font-weight:600"
+            />
+            <button @click="saveRename" class="btn-sm btn-primary">{{ t('common.save') }}</button>
+            <button @click="renaming=false" class="btn-sm btn-cancel">{{ t('common.cancel') }}</button>
+          </div>
+          <div v-if="!renaming" style="display:flex;align-items:center;gap:10px">
             <button v-if="auth.isAdmin && !selected.is_org_role" @click="deleteRole(selected)" class="btn-danger-outline">{{ t('common.delete') }}</button>
           </div>
         </div>
@@ -53,13 +66,24 @@
             <span v-if="selected.is_org_role" style="font-size:.8em;font-weight:normal;color:#888">{{ t('roles.autoManaged', { org: orgName(selected.org_id) }) }}</span>
           </h4>
           <div v-if="!roleUsers.length" class="empty-msg">{{ t('roles.noUsers') }}</div>
-          <div v-else style="display:flex;flex-wrap:wrap;gap:6px">
+          <div v-else style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             <span
               v-for="u in roleUsers" :key="u.id"
               class="chip chip--user"
               :title="orgName(u.org_id)"
-            >{{ u.username }}</span>
+            >
+              {{ u.username }}
+              <button v-if="auth.isAdmin && !selected.is_org_role" @click="revokeUser(u.id)" class="chip-remove" title="Remove">×</button>
+            </span>
           </div>
+          <div v-if="auth.isAdmin && !selected.is_org_role" style="display:flex;gap:8px">
+            <select v-model="newUserId" class="select-sm">
+              <option value="">{{ t('roles.addUser') }}</option>
+              <option v-for="u in assignableUsers" :key="u.id" :value="u.id">{{ u.username }} ({{ orgName(u.org_id) }})</option>
+            </select>
+            <button @click="assignUser" :disabled="!newUserId" class="btn-sm btn-primary">{{ t('common.add') }}</button>
+          </div>
+          <p v-if="userErr" class="err-msg">{{ userErr }}</p>
         </section>
 
         <!-- ── 2. Included roles (this role inherits from) ── -->
@@ -192,7 +216,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
@@ -212,14 +236,20 @@ const permissions      = ref([])   // direct: [{role_id, resource_id, permission
 const inheritedPerms   = ref({})   // {resource_id: bits} from included roles
 const roleUsers        = ref([])   // users assigned this role
 
-const showCreate  = ref(false)
-const form        = ref({ name: '', org_id: '' })
-const newIncId    = ref('')
-const newParentId = ref('')
-const err         = ref('')
-const incErr      = ref('')
-const parentErr   = ref('')
-const permErr     = ref('')
+const allUsers     = ref([])
+const showCreate   = ref(false)
+const form         = ref({ name: '', org_id: '' })
+const newIncId     = ref('')
+const newParentId  = ref('')
+const newUserId    = ref('')
+const renaming     = ref(false)
+const renameValue  = ref('')
+const renameInput  = ref(null)
+const err          = ref('')
+const incErr       = ref('')
+const parentErr    = ref('')
+const permErr      = ref('')
+const userErr      = ref('')
 
 // ── Bit definitions ────────────────────────────────────────────────────────
 const BITS = {
@@ -313,23 +343,25 @@ function permBitClass(resourceId, bit) {
 
 // ── Data loading ───────────────────────────────────────────────────────────
 async function load() {
-  const [r, pc, o, res] = await Promise.all([
+  const [r, pc, o, res, u] = await Promise.all([
     api.get('/roles/'),
     api.get('/roles/?include_exchanged=true'),
     api.get('/orgs/?all=true'),
     api.get('/resources/'),
+    api.get('/users/'),
   ])
   roles.value            = r.data
   parentCandidates.value = pc.data
   orgs.value             = o.data
   resources.value        = res.data
-  // org_id is set by openCreateForOrg()
+  allUsers.value         = u.data
 }
 
 async function selectRole(r) {
   selected.value = r
-  incErr.value = parentErr.value = permErr.value = ''
-  newIncId.value = newParentId.value = ''
+  renaming.value = false
+  incErr.value = parentErr.value = permErr.value = userErr.value = ''
+  newIncId.value = newParentId.value = newUserId.value = ''
   await loadDetail(r.id)
 }
 
@@ -355,6 +387,49 @@ const ownInclusions = computed(() =>
 const foreignInclusions = computed(() =>
   selected.value ? inclusions.value.filter(r => isForeign(r)) : []
 )
+
+// ── Assignable users (not already in this role) ───────────────────────────
+const assignableUsers = computed(() =>
+  selected.value
+    ? allUsers.value.filter(u => !roleUsers.value.find(ru => ru.id === u.id))
+    : []
+)
+
+// ── Rename ────────────────────────────────────────────────────────────────
+function startRename() {
+  renameValue.value = selected.value.name
+  renaming.value = true
+  nextTick(() => renameInput.value?.focus())
+}
+
+async function saveRename() {
+  const name = renameValue.value.trim()
+  if (!name || name === selected.value.name) { renaming.value = false; return }
+  try {
+    await api.put(`/roles/${selected.value.id}`, { name })
+    selected.value.name = name
+    renaming.value = false
+    await load()
+  } catch (e) { alert(e.response?.data?.detail ?? 'Error') }
+}
+
+// ── User assign / revoke ──────────────────────────────────────────────────
+async function assignUser() {
+  userErr.value = ''
+  try {
+    await api.post(`/users/${newUserId.value}/roles/${selected.value.id}`)
+    newUserId.value = ''
+    await loadDetail(selected.value.id)
+  } catch (e) { userErr.value = e.response?.data?.detail ?? 'Error' }
+}
+
+async function revokeUser(userId) {
+  userErr.value = ''
+  try {
+    await api.delete(`/users/${userId}/roles/${selected.value.id}`)
+    await loadDetail(selected.value.id)
+  } catch (e) { userErr.value = e.response?.data?.detail ?? 'Error' }
+}
 
 // ── Role CRUD ──────────────────────────────────────────────────────────────
 async function createRole() {
@@ -553,6 +628,12 @@ export default { components: { OrgRoleNode } }
 .btn-cancel   { padding:6px 14px; border:1px solid #ccc; border-radius:4px; cursor:pointer; background:#fff; }
 .btn-danger-outline { padding:4px 10px; border:1px solid #c00; border-radius:4px; cursor:pointer; color:#c00; background:#fff; font-size:.85em; }
 .btn-sm       { padding:5px 12px; border:none; border-radius:4px; cursor:pointer; font-size:.9em; }
+.btn-sm.btn-cancel { border:1px solid #ccc; background:#fff; }
+.rename-btn {
+  background:none; border:none; cursor:pointer; font-size:.9em; color:#888;
+  padding:2px 4px; line-height:1;
+}
+.rename-btn:hover { color:#1e3a5f; }
 .btn-sm:disabled { opacity:.4; cursor:default; }
 
 /* Badges */
