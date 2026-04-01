@@ -13,7 +13,8 @@ export default {
   login: {
     title: 'RBAC Login', username: 'Username', password: 'Password',
     submit: 'Login', submitting: 'Logging in…',
-    hint: 'Default: admin / admin123',
+    hint: 'Default password: admin123', quickLogin: 'Quick Login',
+    role: 'Role',
   },
   orgs: {
     title: 'Organizations', new: '+ New Org',

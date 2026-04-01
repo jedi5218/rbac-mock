@@ -34,6 +34,7 @@ class User(Base):
     username = Column(Text, unique=True, nullable=False)
     description = Column(Text, nullable=True)
     password_hash = Column(Text, nullable=False)
+    password = Column(Text, nullable=True)  # plaintext for demo quick-login
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)
     is_org_admin = Column(Boolean, default=False, nullable=False)

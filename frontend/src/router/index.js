@@ -19,7 +19,7 @@ const routes = [
   { path: '/resolve', component: ResolveView, meta: { requiresAuth: true } },
   { path: '/exchanges', component: ExchangesView, meta: { requiresAuth: true } },
   { path: '/role-tree', component: RoleTreeView, meta: { requiresAuth: true } },
-  { path: '/wiki/:page', component: WikiView, meta: { requiresAuth: true } },
+  { path: '/wiki/:page', component: WikiView },
 ]
 
 const router = createRouter({

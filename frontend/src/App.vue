@@ -9,6 +9,7 @@
       <router-link to="/resolve" style="color:#acd">{{ t('nav.resolve') }}</router-link>
       <router-link v-if="auth.isAdmin" to="/exchanges" style="color:#acd">{{ t('nav.exchanges') }}</router-link>
       <router-link to="/role-tree" style="color:#acd">{{ t('nav.roleTree') }}</router-link>
+      <router-link to="/wiki/index" style="color:#acd">{{ t('wiki.title') }}</router-link>
       <span style="margin-left:auto;font-size:0.85em">{{ auth.user?.username }}</span>
       <button @click="resetDemo" style="cursor:pointer;background:#e8a735;border:none;color:#1e3a5f;padding:4px 10px;border-radius:4px;font-weight:600;font-size:.8em">{{ t('nav.resetDemo') }}</button>
       <!-- Language switcher -->

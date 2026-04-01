@@ -38,6 +38,7 @@ USERS = [
         "username": "admin",
         "description": "Superadmin account",
         "password_hash": _pw("admin123"),
+        "password": "admin123",
         "org_id": _id("org:Root Corp"),
         "is_superadmin": True,
         "is_org_admin": True,

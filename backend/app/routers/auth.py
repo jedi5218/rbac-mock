@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import User
+from app.models import User, Organization
 from app.schemas import LoginRequest, TokenResponse
 from app.auth import verify_password, create_access_token
 
@@ -18,3 +18,29 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token({"sub": user.id})
     return TokenResponse(access_token=token)
+
+
+@router.get("/demo-users")
+async def demo_users(db: AsyncSession = Depends(get_db)):
+    """Public endpoint — returns all users with org names for the demo login screen."""
+    result = await db.execute(
+        select(
+            User.username,
+            User.password,
+            User.is_superadmin,
+            User.is_org_admin,
+            Organization.name.label("org_name"),
+        )
+        .join(Organization, User.org_id == Organization.id)
+        .order_by(Organization.name, User.username)
+    )
+    return [
+        {
+            "username": row.username,
+            "password": row.password,
+            "org_name": row.org_name,
+            "is_superadmin": row.is_superadmin,
+            "is_org_admin": row.is_org_admin,
+        }
+        for row in result
+    ]

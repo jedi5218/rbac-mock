@@ -32,11 +32,11 @@
       <div class="modal">
         <h3>{{ t('users.createTitle') }}</h3>
         <label>{{ t('login.username') }}</label>
-        <input v-model="createForm.username" class="field" />
+        <input v-model="createForm.username" class="field" required />
         <label>{{ t('users.description') }}</label>
         <input v-model="createForm.description" class="field" :placeholder="t('users.descriptionHint')" />
         <label>{{ t('users.password') }}</label>
-        <input type="password" v-model="createForm.password" class="field" />
+        <input v-model="createForm.password" class="field" required />
         <label>{{ t('common.org') }}</label>
         <input :value="orgName(createForm.org_id)" class="field" disabled />
         <div style="display:flex;gap:12px;margin-bottom:12px">
@@ -45,7 +45,7 @@
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button @click="showCreate=false" class="btn-cancel">{{ t('common.cancel') }}</button>
-          <button @click="createUser" class="btn-primary">{{ t('common.create') }}</button>
+          <button @click="createUser" class="btn-primary" :disabled="!createForm.username.trim() || !createForm.password.trim()">{{ t('common.create') }}</button>
         </div>
         <p v-if="createErr" style="color:red;margin-top:8px">{{ createErr }}</p>
       </div>
@@ -121,7 +121,7 @@ const orgs     = ref([])
 const allRoles = ref([])
 
 const showCreate = ref(false)
-const createForm = ref({ username: '', description: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
+const createForm = ref({ username: '', description: '', password: 'admin123', org_id: '', is_superadmin: false, is_org_admin: false })
 const createErr  = ref('')
 
 const editTarget = ref(null)
@@ -162,7 +162,7 @@ async function load() {
 
 function openCreate(orgId) {
   createErr.value = ''
-  createForm.value = { username: '', description: '', password: '', org_id: orgId, is_superadmin: false, is_org_admin: false }
+  createForm.value = { username: '', description: '', password: 'admin123', org_id: orgId, is_superadmin: false, is_org_admin: false }
   showCreate.value = true
 }
 

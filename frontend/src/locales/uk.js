@@ -14,7 +14,8 @@ export default {
   login: {
     title: 'Вхід до RBAC', username: "Ім'я користувача", password: 'Пароль',
     submit: 'Увійти', submitting: 'Вхід…',
-    hint: 'За замовчуванням: admin / admin123',
+    hint: 'Пароль за замовчуванням: admin123', quickLogin: 'Швидкий вхід',
+    role: 'Роль',
   },
   orgs: {
     title: 'Організації', new: '+ Нова організація',

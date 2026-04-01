@@ -46,6 +46,13 @@ class UserCreate(BaseModel):
     is_superadmin: bool = False
     is_org_admin: bool = False
 
+    @field_validator("username", "password")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must not be blank")
+        return v
+
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None

@@ -68,7 +68,7 @@ def _dump_table(conn, table: str, cols: list[str], order_by: str | None = None) 
 TABLES = [
     ("ORGS",           "organizations",             ["id", "name", "parent_id"],                           None),
     ("USERS",          "users",                     ["id", "username", "description", "password_hash",
-                                                     "org_id", "is_superadmin", "is_org_admin"],           "username"),
+                                                     "password", "org_id", "is_superadmin", "is_org_admin"], "username"),
     ("ROLES",          "roles",                     ["id", "name", "org_id", "is_org_role"],                "org_id, is_org_role DESC, name"),
     ("ROLE_INCLUSIONS","role_inclusions",            ["role_id", "included_role_id"],                       None),
     ("RESOURCES",      "resources",                 ["id", "name", "resource_type", "org_id"],              "org_id, name"),

@@ -60,6 +60,7 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db), _: U
         username=body.username,
         description=body.description,
         password_hash=hash_password(body.password),
+        password=body.password,
         org_id=body.org_id,
         is_superadmin=body.is_superadmin,
         is_org_admin=body.is_org_admin,
@@ -100,6 +101,7 @@ async def update_user(
         user.description = body.description
     if body.password is not None:
         user.password_hash = hash_password(body.password)
+        user.password = body.password
 
     if is_superadmin:
         if body.org_id is not None and body.org_id != user.org_id:
