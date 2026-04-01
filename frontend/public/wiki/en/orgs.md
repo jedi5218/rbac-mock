@@ -21,7 +21,7 @@ Root Corp
 
 ## @members role
 
-Every org automatically has an **@members** role that always contains all users in that org. It is public, auto-managed, and cannot be manually assigned or have parent roles. Child org `@members` roles include the parent org's `@members`, so permissions cascade down the hierarchy.
+Every org automatically has an **@members** role that always contains all users in that org. It is auto-managed and cannot be manually assigned or have parent roles. Child org `@members` roles include the parent org's `@members`, so permissions cascade down the hierarchy.
 
 ## Actions
 

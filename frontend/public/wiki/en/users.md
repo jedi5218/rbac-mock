@@ -16,7 +16,7 @@ Every user belongs to exactly one organization. When a user is created or moved 
 Use the **Roles** button on any user row to assign or revoke roles. Note:
 
 - **@members** roles are managed automatically and cannot be manually assigned or revoked.
-- Org admins can only assign roles that are within their own org subtree or are public.
+- Org admins can only assign roles that are within their own org subtree or exposed via an org exchange.
 
 ## Editing users
 

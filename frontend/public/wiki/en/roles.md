@@ -2,20 +2,10 @@
 
 The **Roles** view is the central place for managing role definitions, inclusions, parent relationships, and resource permissions.
 
-## Public vs Private
-
-| Visibility | Who can use as parent |
-|------------|----------------------|
-| **Public** | Any admin in the system |
-| **Private** | Only admins whose org subtree contains the role's org |
-
-Toggle visibility with the switch in the role detail header.
-
 ## Org-member roles (@members)
 
 Each org has an auto-created **@members** role (shown with an `org` badge). It:
 - Always contains all users in that org
-- Is always public
 - Includes its parent org's @members (permissions cascade up)
 - Cannot have parent roles or be manually assigned/revoked
 
@@ -24,11 +14,15 @@ Each org has an auto-created **@members** role (shown with an `org` badge). It:
 - **Included roles** — roles this role inherits permissions *from* (direct inclusions).
 - **Parent roles** — roles that include *this* role (reverse direction).
 
-Role graphs may contain cycles; the recursive permission resolution handles them safely via set-based deduplication.
+Inclusions are split into two sections:
+- **Own / Subtree** — roles from your org or its descendant orgs.
+- **Foreign (via exchanges)** — roles from other orgs, made available through org exchanges.
 
-## Foreign roles
+## Foreign roles & Propagation limits
 
-Roles from outside your org's ancestor/descendant chain are marked with a pink **foreign** badge. You can still add public foreign roles as parents.
+Roles from outside your org's ancestor/descendant chain are marked with a pink **foreign** badge. Foreign roles can only be included if they are exposed through an org exchange.
+
+**Important:** When a role with foreign inclusions is itself shared externally (via an exchange), the foreign inclusions do not propagate. Only the role's own permissions and those from its org subtree are shared. This prevents unintended transitive cross-org permission sharing.
 
 ## Permission bits
 

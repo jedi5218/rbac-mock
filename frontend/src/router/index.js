@@ -5,7 +5,7 @@ import UsersView from '../views/UsersView.vue'
 import RolesView from '../views/RolesView.vue'
 import ResourcesView from '../views/ResourcesView.vue'
 import ResolveView from '../views/ResolveView.vue'
-import InteractionsView from '../views/InteractionsView.vue'
+import ExchangesView from '../views/ExchangesView.vue'
 import WikiView from '../views/WikiView.vue'
 import RoleTreeView from '../views/RoleTreeView.vue'
 
@@ -17,7 +17,7 @@ const routes = [
   { path: '/roles', component: RolesView, meta: { requiresAuth: true } },
   { path: '/resources', component: ResourcesView, meta: { requiresAuth: true } },
   { path: '/resolve', component: ResolveView, meta: { requiresAuth: true } },
-  { path: '/interactions', component: InteractionsView, meta: { requiresAuth: true } },
+  { path: '/exchanges', component: ExchangesView, meta: { requiresAuth: true } },
   { path: '/role-tree', component: RoleTreeView, meta: { requiresAuth: true } },
   { path: '/wiki/:page', component: WikiView, meta: { requiresAuth: true } },
 ]

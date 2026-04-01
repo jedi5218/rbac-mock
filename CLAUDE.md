@@ -27,10 +27,10 @@ Full-stack RBAC demo: **FastAPI** backend + **Vue 3** frontend + **PostgreSQL**,
 ### Backend (`backend/`)
 
 - **Framework:** FastAPI with async SQLAlchemy 2.0 + asyncpg
-- **Models:** 7 SQLAlchemy ORM tables in `app/models.py` — organizations, users, resources, roles, role_inclusions, role_resource_permissions, user_roles
+- **Models:** 9 SQLAlchemy ORM tables in `app/models.py` — organizations, users, resources, roles, role_inclusions, role_resource_permissions, user_roles, org_exchanges, exchange_roles
 - **Auth:** JWT bearer tokens (python-jose) + bcrypt passwords in `app/auth.py`. Token lifetime is 60 min (env-configurable).
-- **Routers:** `app/routers/` — one module per domain: auth, organizations, users, resources, roles, resolve, interactions
-- **Permissions engine:** `app/permissions.py` — recursive CTEs for cycle detection, effective permission resolution (BIT_OR aggregation), org subtree scoping, and cross-org interaction detection
+- **Routers:** `app/routers/` — one module per domain: auth, organizations, users, resources, roles, resolve, exchanges
+- **Permissions engine:** `app/permissions.py` — recursive CTEs for cycle detection, effective permission resolution (BIT_OR aggregation with foreign propagation limits), org subtree scoping, and exchange-based role access checks
 - **Caching:** `app/cache.py` — in-memory dict cache for resolved permissions, keyed by user_id. Invalidated per-user on role assign/revoke, globally on role structure changes.
 - **Migrations:** Alembic in `backend/alembic/`. Backend container runs `alembic upgrade head` on startup. Migrations include seed data (admin user, root org).
 
@@ -39,7 +39,7 @@ Full-stack RBAC demo: **FastAPI** backend + **Vue 3** frontend + **PostgreSQL**,
 - **Framework:** Vue 3 + Vite + Pinia + Vue Router + vue-i18n (en/uk)
 - **State:** Pinia store in `src/stores/auth.js`; Axios instance with auto-injected bearer token in `src/stores/api.js`
 - **Routing:** Auth guard redirects unauthenticated users to `/login`
-- **Views:** Login, Orgs, Users, Roles, Resources, Resolve, Interactions, RoleTree, Wiki
+- **Views:** Login, Orgs, Users, Roles, Resources, Resolve, Exchanges, RoleTree, Wiki
 
 ## Key Domain Concepts
 
@@ -47,7 +47,8 @@ Full-stack RBAC demo: **FastAPI** backend + **Vue 3** frontend + **PostgreSQL**,
 - **Role DAG:** Roles include other roles. Cycle detection uses a recursive CTE walk before any insertion. Self-inclusion is blocked by a DB check constraint.
 - **@members roles:** Auto-created system roles (one per org, `is_org_role=true`). Cannot be edited or deleted. Users are auto-enrolled on creation.
 - **Permission bitmasks:** Per resource-type encoding — document: read(1), write(2); video: view(1), comment(2), stream(4). Effective permissions are computed by BIT_OR across the role inclusion tree.
-- **Cross-org interactions:** Detects role inclusions spanning different orgs, excluding ancestor/descendant pairs (intra-hierarchy sharing is expected).
+- **Org exchanges:** Bilateral agreements between two orgs enabling cross-org role sharing. Each side exposes specific roles to the partner. Exchanges use canonical pair ordering (`org_a_id < org_b_id`) to prevent duplicates. Closing an exchange cascades deletion of dependent cross-org role inclusions.
+- **Foreign propagation limits:** When a cross-org boundary is crossed during role tree traversal, only roles from the crossed-into org's subtree may be followed further. This prevents transitive cross-org permission leaks (e.g., Org C including Org A's role won't gain Org B's permissions just because Org A included Org B). Tracked via `home_subtree_root` in the effective permissions CTE.
 
 ## Environment Variables (set in docker-compose.yml)
 

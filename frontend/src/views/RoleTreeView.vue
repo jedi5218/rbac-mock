@@ -149,7 +149,9 @@ const RoleTreeNode = defineComponent({
           : h('span', { style: 'width:14px;text-align:center;color:#ccc;flex-shrink:0' }, '•'),
 
         // Role name
-        h('span', { style: `font-weight:${isDirect ? '600' : '400'}` }, node.name),
+        h('span', {
+          style: `font-weight:${isDirect ? '600' : '400'};${node.is_propagation_blocked ? 'opacity:.5;text-decoration:line-through' : ''}`,
+        }, node.name),
 
         // Org name
         h('span', { style: 'font-size:.78em;color:#888' }, orgNameFn(node.org_id)),
@@ -161,11 +163,11 @@ const RoleTreeNode = defineComponent({
         node.is_org_role
           ? h('span', { class: 'rt-badge rt-badge--org' }, 'org')
           : null,
-        node.is_public && !node.is_org_role
-          ? h('span', { class: 'rt-badge rt-badge--pub' }, 'pub')
-          : null,
         isForeign
           ? h('span', { class: 'rt-badge rt-badge--foreign' }, 'foreign')
+          : null,
+        node.is_propagation_blocked
+          ? h('span', { class: 'rt-badge rt-badge--blocked' }, 'blocked')
           : null,
       ])
 
@@ -202,6 +204,6 @@ export default { components: { RoleTreeNode } }
 }
 .rt-badge--direct  { background: #e8f5e9; color: #2e7d32; }
 .rt-badge--org     { background: #fff3e0; color: #e65100; }
-.rt-badge--pub     { background: #e3f2fd; color: #1565c0; }
 .rt-badge--foreign { background: #fce4ec; color: #880e4f; }
+.rt-badge--blocked { background: #e0e0e0; color: #757575; text-decoration: line-through; }
 </style>

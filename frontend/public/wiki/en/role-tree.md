@@ -14,9 +14,9 @@ Each node in the tree represents a role. Root-level nodes are roles **directly a
 
 - **▾ / ▸** — click to expand or collapse a branch
 - **•** — leaf node (no inclusions)
-- `pub` badge — role is public (usable cross-org as a parent)
 - `org` badge — auto-managed org-member role
 - `foreign` badge — role belongs to an org outside your ancestor/descendant chain
+- `blocked` badge — role's permissions are blocked by the foreign propagation limit (shown dimmed and struck-through)
 
 ## Cycle handling
 

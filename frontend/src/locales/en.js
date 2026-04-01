@@ -1,7 +1,7 @@
 export default {
   nav: {
     orgs: 'Orgs', users: 'Users', roles: 'Roles', resources: 'Resources',
-    resolve: 'Resolve', interactions: 'Interactions', roleTree: 'Role Tree', logout: 'Logout',
+    resolve: 'Resolve', exchanges: 'Exchanges', roleTree: 'Role Tree', logout: 'Logout',
   },
   common: {
     name: 'Name', org: 'Org', type: 'Type', actions: 'Actions',
@@ -33,10 +33,8 @@ export default {
   },
   roles: {
     title: 'Roles', new: '+ New Role',
-    public: 'Public', private: 'Private',
-    publicHint: 'Public roles can be used as parent by any admin',
-    alwaysPublic: 'always public', orgMember: 'org-member',
-    orgMemberNotice: 'This is an auto-managed org-member role. Its user list mirrors all members of {org} and updates automatically. It is always public and cannot have parent roles.',
+    orgMember: 'org-member',
+    orgMemberNotice: 'This is an auto-managed org-member role. Its user list mirrors all members of {org} and updates automatically. It cannot have parent roles.',
     createTitle: 'Create Role', noRoles: 'No roles',
     selectRole: 'Select a role to view details',
     usersTitle: 'Users with this role',
@@ -53,6 +51,9 @@ export default {
     permLegendInherited: 'from an included role',
     permLegendOff: 'not granted',
     foreign: 'foreign',
+    ownSubtree: 'Own / Subtree',
+    foreignViaExchanges: 'Foreign (via exchanges)',
+    propagationWarning: 'Foreign inclusions do not propagate when this role is shared externally.',
   },
   resources: {
     title: 'Resources', new: '+ New Resource', noResources: 'No resources',
@@ -69,14 +70,23 @@ export default {
     noPerms: 'No permissions (user has no roles or roles have no resource permissions)',
     computed: 'Computed via recursive role-tree CTE with BIT_OR aggregation across all transitively included roles.',
   },
-  interactions: {
-    title: 'Org Interactions',
-    subtitle: 'Cross-org role relationships within your admin scope. Parent/child orgs are excluded — only lateral interactions are shown.',
-    noOrgs: 'No orgs in scope.',
-    noInteractions: 'no cross-org interactions',
-    includes: '⊃ includes', includedBy: '⊂ included by',
-    foreignOrg: '{n} foreign org', foreignOrgs: '{n} foreign orgs',
-    link: '{n} link', links: '{n} links',
+  exchanges: {
+    title: 'Org Exchanges',
+    subtitle: 'Manage cross-org role sharing agreements. Each exchange is a bilateral agreement between two organizations.',
+    noExchanges: 'No exchanges',
+    newExchange: '+ New Exchange',
+    yourOrg: 'Your Org',
+    partnerOrg: 'Partner Org',
+    create: 'Create Exchange',
+    closeExchange: 'Close Exchange',
+    closeWarning: 'Closing this exchange will remove {n} role inclusion(s).',
+    closePartnerWarning: 'Warning: {org} exposed {n} role(s) in this exchange. Re-instating this sharing requires their admin to create a new exchange.',
+    exposedBy: 'Roles exposed by {org}',
+    expose: 'Expose',
+    selectRole: '— select role —',
+    exchangeWith: 'Exchanges with {org}',
+    created: 'Created',
+    noRolesExposed: 'No roles exposed yet',
   },
   wiki: { title: 'Wiki', notFound: 'Wiki page not found.', back: '← Back' },
   roleTree: {

@@ -19,7 +19,6 @@
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-weight:500">{{ r.name }}</span>
             <span v-if="r.is_org_role" class="badge badge--sys" title="Auto-managed org-member role">org</span>
-            <span v-if="r.is_public && !r.is_org_role" class="badge badge--pub" title="Public role">pub</span>
           </div>
           <div style="font-size:.78em;color:#888">{{ orgName(r.org_id) }}</div>
         </div>
@@ -35,14 +34,6 @@
             <span style="font-weight:normal;color:#888;font-size:.75em">{{ orgName(selected.org_id) }}</span>
           </h3>
           <div style="display:flex;align-items:center;gap:10px">
-            <!-- is_public pill toggle (hidden for org-roles) -->
-            <div v-if="!selected.is_org_role && auth.isAdmin" class="pill-toggle" :title="t('roles.publicHint')" @click="togglePublic">
-              <div :class="['pill-track', selected.is_public && 'pill-track--on']">
-                <div class="pill-thumb"></div>
-              </div>
-              <span class="pill-label">{{ selected.is_public ? t('roles.public') : t('roles.private') }}</span>
-            </div>
-            <span v-if="selected.is_org_role" class="badge badge--pub" style="font-size:.8em">{{ t('roles.alwaysPublic') }}</span>
             <button v-if="auth.isAdmin && !selected.is_org_role" @click="deleteRole(selected)" class="btn-danger-outline">{{ t('common.delete') }}</button>
           </div>
         </div>
@@ -72,12 +63,29 @@
         <section class="detail-section">
           <h4 class="section-title">{{ t('roles.includedTitle') }} <span class="section-sub">{{ t('roles.includedSub') }}</span></h4>
           <div v-if="!inclusions.length" class="empty-msg">None</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-            <span v-for="r in inclusions" :key="r.id" class="chip chip--role">
-              {{ formatRole(r) }}<span v-if="isForeign(r)" class="badge badge--foreign">{{ t('roles.foreign') }}</span>
-              <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
-            </span>
-          </div>
+          <template v-else>
+            <!-- Own / Subtree inclusions -->
+            <div v-if="ownInclusions.length" style="margin-bottom:8px">
+              <div class="inc-section-label">{{ t('roles.ownSubtree') }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span v-for="r in ownInclusions" :key="r.id" class="chip chip--role">
+                  {{ formatRole(r) }}
+                  <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
+                </span>
+              </div>
+            </div>
+            <!-- Foreign inclusions (via exchanges) -->
+            <div v-if="foreignInclusions.length" style="margin-bottom:8px">
+              <div class="inc-section-label">{{ t('roles.foreignViaExchanges') }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span v-for="r in foreignInclusions" :key="r.id" class="chip chip--role">
+                  {{ formatRole(r) }}<span class="badge badge--foreign">{{ t('roles.foreign') }}</span>
+                  <button v-if="auth.isAdmin" @click="removeInclusion(r.id)" class="chip-remove" title="Remove">×</button>
+                </span>
+              </div>
+              <div class="propagation-warning">{{ t('roles.propagationWarning') }}</div>
+            </div>
+          </template>
           <div v-if="auth.isAdmin" style="display:flex;gap:8px">
             <select v-model="newIncId" class="select-sm">
               <option value="">{{ t('roles.addIncluded') }}</option>
@@ -172,10 +180,6 @@
         <select v-model="form.org_id" class="field">
           <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
         </select>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
-          <input type="checkbox" v-model="form.is_public" />
-          <span>{{ t('roles.public') }} <small style="color:#888">({{ t('roles.publicHint') }})</small></span>
-        </label>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button @click="showCreate=false" class="btn-cancel">{{ t('common.cancel') }}</button>
           <button @click="createRole" class="btn-primary">{{ t('common.create') }}</button>
@@ -197,7 +201,7 @@ const auth = useAuthStore()
 
 // ── State ──────────────────────────────────────────────────────────────────
 const roles            = ref([])
-const parentCandidates = ref([])  // all public + in-scope roles, for parent dropdown
+const parentCandidates = ref([])  // all in-scope + exchanged roles, for parent dropdown
 const orgs             = ref([])
 const resources        = ref([])
 const selected         = ref(null)
@@ -208,7 +212,7 @@ const inheritedPerms   = ref({})   // {resource_id: bits} from included roles
 const roleUsers        = ref([])   // users assigned this role
 
 const showCreate  = ref(false)
-const form        = ref({ name: '', org_id: '', is_public: false })
+const form        = ref({ name: '', org_id: '' })
 const newIncId    = ref('')
 const newParentId = ref('')
 const err         = ref('')
@@ -284,7 +288,7 @@ function permBitClass(resourceId, bit) {
 async function load() {
   const [r, pc, o, res] = await Promise.all([
     api.get('/roles/'),
-    api.get('/roles/?include_all_public=true'),
+    api.get('/roles/?include_exchanged=true'),
     api.get('/orgs/'),
     api.get('/resources/'),
   ])
@@ -317,17 +321,13 @@ async function loadDetail(id) {
   roleUsers.value     = users.data
 }
 
-// ── Public toggle ──────────────────────────────────────────────────────────
-async function togglePublic() {
-  permErr.value = ''
-  try {
-    const res = await api.put(`/roles/${selected.value.id}`, { is_public: !selected.value.is_public })
-    // update local state
-    selected.value = res.data
-    const idx = roles.value.findIndex(r => r.id === selected.value.id)
-    if (idx !== -1) roles.value[idx] = res.data
-  } catch (e) { permErr.value = e.response?.data?.detail ?? 'Error' }
-}
+// ── Split inclusions ──────────────────────────────────────────────────────
+const ownInclusions = computed(() =>
+  selected.value ? inclusions.value.filter(r => !isForeign(r)) : []
+)
+const foreignInclusions = computed(() =>
+  selected.value ? inclusions.value.filter(r => isForeign(r)) : []
+)
 
 // ── Role CRUD ──────────────────────────────────────────────────────────────
 async function createRole() {
@@ -479,23 +479,17 @@ onMounted(load)
 /* Badges */
 .badge { padding:1px 6px; border-radius:8px; font-size:.72em; font-weight:600; letter-spacing:.02em; }
 .badge--sys     { background:#fff3e0; color:#e65100; }
-.badge--pub     { background:#e8f5e9; color:#2e7d32; }
 .badge--foreign { background:#fce4ec; color:#880e4f; margin-left:4px; }
 
-/* Public pill toggle */
-.pill-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
-.pill-track {
-  position:relative; width:38px; height:21px; background:#ccc;
-  border-radius:11px; transition:background .2s; flex-shrink:0;
+/* Inclusion section labels */
+.inc-section-label {
+  font-size:.78em; color:#888; text-transform:uppercase; letter-spacing:.03em;
+  margin-bottom:4px; font-weight:600;
 }
-.pill-track--on { background:#2e7d32; }
-.pill-thumb {
-  position:absolute; top:2.5px; left:2.5px; width:16px; height:16px;
-  background:#fff; border-radius:50%; transition:transform .2s;
-  box-shadow:0 1px 3px rgba(0,0,0,.25);
+.propagation-warning {
+  margin-top:6px; padding:6px 10px; background:#fff8e1; border:1px solid #ffe082;
+  border-radius:4px; font-size:.82em; color:#6d4c00;
 }
-.pill-track--on .pill-thumb { transform:translateX(17px); }
-.pill-label { font-size:.85em; color:#444; }
 
 /* Help link */
 .help-link {
