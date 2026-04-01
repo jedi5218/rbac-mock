@@ -13,7 +13,7 @@ router = APIRouter(prefix="/orgs", tags=["organizations"])
 
 async def _create_org_role(db: AsyncSession, org_id: str, parent_id: str | None = None) -> Role:
     """Create the automatic @members role for a new org and wire the inclusion chain."""
-    role = Role(name="@members", org_id=org_id, is_public=True, is_org_role=True)
+    role = Role(name="@members", org_id=org_id, is_org_role=True)
     db.add(role)
     await db.flush()  # materialise role.id
     if parent_id:

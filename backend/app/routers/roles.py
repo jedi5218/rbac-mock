@@ -12,6 +12,7 @@ from app.auth import get_current_user, require_admin
 from app.permissions import (
     org_in_subtree, visible_org_ids,
     get_role_inherited_permissions,
+    is_role_exposed_to_org, get_exchanged_role_ids,
 )
 import app.cache as cache
 
@@ -28,14 +29,17 @@ async def _admin_owns_org(current_user: User, org_id: str, db: AsyncSession):
 
 
 async def _can_use_role(current_user: User, role: Role, db: AsyncSession):
-    """Check that the admin can reference role (public → always; private → org scope)."""
-    if role.is_public or current_user.is_superadmin:
+    """Check that the admin can reference role (in scope or exposed via exchange)."""
+    if current_user.is_superadmin:
         return
-    if not await org_in_subtree(db, current_user.org_id, role.org_id):
-        raise HTTPException(
-            403,
-            f"Role '{role.name}' is private and outside your org scope",
-        )
+    if await org_in_subtree(db, current_user.org_id, role.org_id):
+        return
+    if await is_role_exposed_to_org(db, role.id, current_user.org_id):
+        return
+    raise HTTPException(
+        403,
+        f"Role '{role.name}' is not accessible — not in scope and not exposed via exchange",
+    )
 
 
 def _guard_org_role(role: Role, operation: str = "modify"):
@@ -49,15 +53,19 @@ def _guard_org_role(role: Role, operation: str = "modify"):
 async def list_roles(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    include_all_public: bool = Query(False),
+    include_exchanged: bool = Query(False),
 ):
     org_ids = await visible_org_ids(db, current_user)
     if org_ids is None:
         result = await db.execute(select(Role))
-    elif include_all_public and (current_user.is_superadmin or current_user.is_org_admin):
-        result = await db.execute(
-            select(Role).where(or_(Role.org_id.in_(org_ids), Role.is_public == True))
-        )
+    elif include_exchanged and (current_user.is_superadmin or current_user.is_org_admin):
+        exchanged_ids = await get_exchanged_role_ids(db, current_user.org_id)
+        if exchanged_ids:
+            result = await db.execute(
+                select(Role).where(or_(Role.org_id.in_(org_ids), Role.id.in_(exchanged_ids)))
+            )
+        else:
+            result = await db.execute(select(Role).where(Role.org_id.in_(org_ids)))
     else:
         result = await db.execute(select(Role).where(Role.org_id.in_(org_ids)))
     return result.scalars().all()
@@ -73,7 +81,7 @@ async def create_role(
     if not org:
         raise HTTPException(404, "Org not found")
     await _admin_owns_org(current_user, body.org_id, db)
-    role = Role(name=body.name, org_id=body.org_id, is_public=body.is_public, is_org_role=False)
+    role = Role(name=body.name, org_id=body.org_id, is_org_role=False)
     db.add(role)
     await db.commit()
     await db.refresh(role)
@@ -94,8 +102,6 @@ async def update_role(
     await _admin_owns_org(current_user, role.org_id, db)
     if body.name is not None:
         role.name = body.name
-    if body.is_public is not None:
-        role.is_public = body.is_public
     await db.commit()
     await db.refresh(role)
     return role

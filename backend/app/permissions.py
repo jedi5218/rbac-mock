@@ -43,23 +43,71 @@ async def check_inclusion_cycle(db: AsyncSession, role_id: str, new_included_id:
 # ── Effective permissions ─────────────────────────────────────────────────────
 
 async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict]:
+    """
+    Resolve effective permissions with foreign-propagation limits.
+
+    Once a cross-org boundary is crossed during role tree traversal, only roles
+    from the crossed-into org's subtree may be followed. Further foreign
+    inclusions are blocked. This prevents transitive cross-org sharing.
+    """
     sql = text("""
-        WITH RECURSIVE role_tree AS (
-            SELECT role_id FROM user_roles WHERE user_id = :uid
-            UNION
-            SELECT ri.included_role_id
+        WITH RECURSIVE
+        -- Pre-compute org descendant relationships
+        org_descendants AS (
+            SELECT id AS root_id, id AS desc_id FROM organizations
+            UNION ALL
+            SELECT od.root_id, o.id
+            FROM organizations o
+            JOIN org_descendants od ON o.parent_id = od.desc_id
+        ),
+
+        -- Walk the role inclusion tree with propagation tracking
+        role_tree AS (
+            -- Base: user's directly assigned roles (no boundary crossed)
+            SELECT r.id AS role_id, r.org_id,
+                   CAST(NULL AS TEXT) AS home_subtree_root
+            FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = :uid
+
+            UNION ALL
+
+            -- Recursive: follow inclusions with propagation limits
+            SELECT r2.id, r2.org_id,
+                CASE
+                    -- Already crossed a boundary: keep the same home root
+                    WHEN rt.home_subtree_root IS NOT NULL THEN rt.home_subtree_root
+                    -- Same org: no crossing
+                    WHEN r2.org_id = rt.org_id THEN NULL
+                    -- Child org (in subtree): no crossing
+                    WHEN EXISTS (
+                        SELECT 1 FROM org_descendants
+                        WHERE root_id = rt.org_id AND desc_id = r2.org_id
+                    ) THEN NULL
+                    -- Crossing into a foreign org: record as new home root
+                    ELSE r2.org_id
+                END
             FROM role_inclusions ri
             JOIN role_tree rt ON ri.role_id = rt.role_id
+            JOIN roles r2 ON ri.included_role_id = r2.id
+            WHERE
+                -- No boundary crossed yet: allow any inclusion
+                rt.home_subtree_root IS NULL
+                -- Already crossed: only allow if included role is within home subtree
+                OR EXISTS (
+                    SELECT 1 FROM org_descendants
+                    WHERE root_id = rt.home_subtree_root AND desc_id = r2.org_id
+                )
         )
         SELECT
-            r.id          AS resource_id,
-            r.name        AS resource_name,
-            r.resource_type,
+            res.id          AS resource_id,
+            res.name        AS resource_name,
+            res.resource_type,
             BIT_OR(rrp.permission_bits) AS bits
         FROM role_tree rt
         JOIN role_resource_permissions rrp ON rrp.role_id = rt.role_id
-        JOIN resources r ON r.id = rrp.resource_id
-        GROUP BY r.id, r.name, r.resource_type
+        JOIN resources res ON res.id = rrp.resource_id
+        GROUP BY res.id, res.name, res.resource_type
     """)
     result = await db.execute(sql, {"uid": user_id})
     rows = result.mappings().all()
@@ -202,114 +250,3 @@ async def get_exchanged_role_ids(db: AsyncSession, admin_org_id: str) -> list[st
     return [str(row[0]) for row in result.fetchall()]
 
 
-# ── Cross-org interactions ─────────────────────────────────────────────────────
-
-async def get_interactions(db: AsyncSession, org_ids: list[str]) -> dict[str, dict]:
-    """
-    For each org in org_ids, find cross-org role interactions, excluding
-    ancestor/descendant org relationships (intra-hierarchy sharing is expected).
-
-    Returns:  {this_org_id: {foreign_org_id: {"foreign_org_name": str, "roles": [...]}}}
-    """
-    if not org_ids:
-        return {}
-
-    sql = text("""
-        WITH RECURSIVE
-        -- Ancestors of each visible org (walk up)
-        ancestors AS (
-            SELECT id AS org_id, parent_id AS related_id
-            FROM   organizations
-            WHERE  id = ANY(:org_ids) AND parent_id IS NOT NULL
-            UNION
-            SELECT a.org_id, o.parent_id
-            FROM   organizations o
-            JOIN   ancestors a ON o.id = a.related_id
-            WHERE  o.parent_id IS NOT NULL
-        ),
-        -- Descendants of each visible org (walk down)
-        descendants AS (
-            SELECT parent_id AS org_id, id AS related_id
-            FROM   organizations
-            WHERE  parent_id = ANY(:org_ids)
-            UNION
-            SELECT d.org_id, o.id
-            FROM   organizations o
-            JOIN   descendants d ON o.parent_id = d.related_id
-        ),
-        -- Self entries (each org is related to itself)
-        self_rel AS (
-            SELECT id AS org_id, id AS related_id
-            FROM   organizations WHERE id = ANY(:org_ids)
-        ),
-        -- Union of all intra-hierarchy org pairs to exclude
-        excluded AS (
-            SELECT org_id, related_id FROM ancestors
-            UNION
-            SELECT org_id, related_id FROM descendants
-            UNION
-            SELECT org_id, related_id FROM self_rel
-        ),
-        -- Cross-org role inclusions from two directions
-        raw AS (
-            -- Our org's role INCLUDES foreign org's role
-            SELECT r1.org_id AS this_org,
-                   r2.org_id AS foreign_org,
-                   r1.id     AS this_role_id,
-                   r1.name   AS this_role_name,
-                   r2.id     AS foreign_role_id,
-                   r2.name   AS foreign_role_name,
-                   'includes'::text AS relation
-            FROM   role_inclusions ri
-            JOIN   roles r1 ON ri.role_id          = r1.id
-            JOIN   roles r2 ON ri.included_role_id = r2.id
-            WHERE  r1.org_id = ANY(:org_ids)
-              AND  r1.org_id != r2.org_id
-
-            UNION ALL
-
-            -- Our org's role IS INCLUDED BY foreign org's role
-            SELECT r1.org_id,
-                   r2.org_id,
-                   r1.id, r1.name,
-                   r2.id, r2.name,
-                   'included_by'::text
-            FROM   role_inclusions ri
-            JOIN   roles r1 ON ri.included_role_id = r1.id
-            JOIN   roles r2 ON ri.role_id          = r2.id
-            WHERE  r1.org_id = ANY(:org_ids)
-              AND  r1.org_id != r2.org_id
-        )
-        SELECT raw.*,
-               o_foreign.name AS foreign_org_name
-        FROM   raw
-        JOIN   organizations o_foreign ON o_foreign.id = raw.foreign_org
-        WHERE  NOT EXISTS (
-            SELECT 1 FROM excluded e
-            WHERE  e.org_id = raw.this_org AND e.related_id = raw.foreign_org
-        )
-        ORDER BY raw.this_org, raw.foreign_org, raw.this_role_name
-    """)
-
-    result = await db.execute(sql, {"org_ids": org_ids})
-    rows = result.mappings().all()
-
-    # Group: this_org → foreign_org → list of role links
-    out: dict[str, dict] = {}
-    for row in rows:
-        this_org    = str(row["this_org"])
-        foreign_org = str(row["foreign_org"])
-        out.setdefault(this_org, {})
-        out[this_org].setdefault(foreign_org, {
-            "foreign_org_id":   foreign_org,
-            "foreign_org_name": row["foreign_org_name"],
-            "roles": [],
-        })
-        out[this_org][foreign_org]["roles"].append({
-            "this_role_id":    str(row["this_role_id"]),
-            "this_role_name":  row["this_role_name"],
-            "foreign_role_id": str(row["foreign_role_id"]),
-            "foreign_role_name": row["foreign_role_name"],
-            "relation":        row["relation"],
-        })
-    return out

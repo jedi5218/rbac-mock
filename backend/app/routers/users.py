@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models import User, Organization, Role, UserRole, RoleInclusion
 from app.schemas import UserCreate, UserUpdate, UserOut, RoleOut, RoleTreeResponse, RoleTreeNode
 from app.auth import get_current_user, require_superadmin, require_admin, hash_password
-from app.permissions import org_in_subtree, get_org_role
+from app.permissions import org_in_subtree, get_org_role, get_subtree_org_ids
 import app.cache as cache
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -180,22 +180,62 @@ async def get_role_tree(
         select(Role).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == user_id)
     )).scalars().all()
 
-    def build_node(role_id: str, path: frozenset[str]) -> RoleTreeNode:
+    # Pre-compute org subtrees for propagation tracking
+    org_subtrees: dict[str, set[str]] = {}
+    for role in all_roles.values():
+        if role.org_id not in org_subtrees:
+            org_subtrees[role.org_id] = set(await get_subtree_org_ids(db, role.org_id))
+
+    def _in_subtree(parent_org_id: str, child_org_id: str) -> bool:
+        return child_org_id in org_subtrees.get(parent_org_id, set())
+
+    def build_node(
+        role_id: str,
+        path: frozenset[str],
+        home_subtree_root: str | None = None,
+    ) -> RoleTreeNode:
         role = all_roles[role_id]
         is_cycle = role_id in path
         new_path = path | {role_id}
         children = []
         if not is_cycle:
             for inc_id in inclusions_map.get(role_id, []):
-                if inc_id in all_roles:
-                    children.append(build_node(inc_id, new_path))
+                if inc_id not in all_roles:
+                    continue
+                inc_role = all_roles[inc_id]
+                # Determine if this inclusion crosses an org boundary
+                same_subtree = (
+                    inc_role.org_id == role.org_id
+                    or _in_subtree(role.org_id, inc_role.org_id)
+                )
+                if home_subtree_root is not None and not same_subtree:
+                    # Already crossed a boundary; this is another foreign hop — blocked
+                    also_in_home = _in_subtree(home_subtree_root, inc_role.org_id)
+                    children.append(RoleTreeNode(
+                        id=inc_role.id,
+                        name=inc_role.name,
+                        org_id=inc_role.org_id,
+                        is_org_role=inc_role.is_org_role,
+                        is_cycle=False,
+                        is_propagation_blocked=not also_in_home,
+                        included=[] if not also_in_home else build_node(
+                            inc_id, new_path, home_subtree_root
+                        ).included,
+                    ))
+                else:
+                    # Compute the new home_subtree_root
+                    new_home = home_subtree_root
+                    if not same_subtree and home_subtree_root is None:
+                        new_home = inc_role.org_id  # first foreign hop
+                    children.append(build_node(inc_id, new_path, new_home))
+
         return RoleTreeNode(
             id=role.id,
             name=role.name,
             org_id=role.org_id,
-            is_public=role.is_public,
             is_org_role=role.is_org_role,
             is_cycle=is_cycle,
+            is_propagation_blocked=False,
             included=children,
         )
 
