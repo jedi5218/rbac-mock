@@ -2,20 +2,22 @@
 """Export current database state as seed.py.
 
 Connects to the database, reads all tables, and prints a complete seed.py
-module to stdout.  Redirect to overwrite the seed file:
+module to stdout.  Run inside the backend container (where dependencies
+are installed) and redirect on the host:
 
-    cd backend
-    DATABASE_URL=postgresql+asyncpg://... python -m scripts.export_seed > app/seed.py
+    docker compose exec -T backend python -m scripts.export_seed > backend/app/seed.py
 
-The async DATABASE_URL is accepted as-is (the script swaps the driver
-to psycopg2 automatically).
+The async DATABASE_URL from the container environment is used directly
+with asyncpg (no sync driver needed).
 """
 
+import asyncio
 import os
 import sys
 import textwrap
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # ── DB connection ────────────────────────────────────────────────────────────
 
@@ -24,12 +26,13 @@ DATABASE_URL = os.environ.get(
     "postgresql+asyncpg://rbms:rbmspass@localhost:5432/rbms",
 )
 
-# Swap async driver for sync
-sync_url = DATABASE_URL.replace("+asyncpg", "").replace("postgresql://", "postgresql+psycopg2://")
-if not sync_url.startswith("postgresql"):
-    sync_url = "postgresql+psycopg2" + sync_url[sync_url.index("://"):]
+# Ensure we have the async driver
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-engine = create_engine(sync_url)
+engine = create_async_engine(DATABASE_URL)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,12 +57,12 @@ def _fmt_row(row: dict, cols: list[str]) -> str:
     return "    {" + ", ".join(parts) + "},"
 
 
-def _dump_table(conn, table: str, cols: list[str], order_by: str | None = None) -> list[dict]:
+async def _dump_table(conn, table: str, cols: list[str], order_by: str | None = None) -> list[dict]:
     """Query a table and return rows as dicts."""
     sql = f"SELECT {', '.join(cols)} FROM {table}"
     if order_by:
         sql += f" ORDER BY {order_by}"
-    result = conn.execute(text(sql))
+    result = await conn.execute(text(sql))
     return [dict(row._mapping) for row in result]
 
 
@@ -81,10 +84,10 @@ TABLES = [
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
-    with engine.connect() as conn:
+async def main():
+    async with engine.connect() as conn:
         # Topologically order orgs (parents first)
-        all_orgs = _dump_table(conn, "organizations", ["id", "name", "parent_id"])
+        all_orgs = await _dump_table(conn, "organizations", ["id", "name", "parent_id"])
         org_by_id = {o["id"]: o for o in all_orgs}
         ordered_orgs = []
         placed = set()
@@ -142,7 +145,7 @@ def main():
             print()
             print("# " + "─" * 76)
             print()
-            rows = _dump_table(conn, table, cols, order_by)
+            rows = await _dump_table(conn, table, cols, order_by)
             type_hint = ": list[dict]" if not rows else ""
             print(f"{var_name}{type_hint} = [")
             for row in rows:
@@ -190,4 +193,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

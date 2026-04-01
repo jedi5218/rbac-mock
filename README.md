@@ -99,11 +99,10 @@ The live demo can be reset to its initial state at any time:
 - **API**: `POST /reset` (no auth required, 30-second rate limit)
 - **Auto-reset**: Runs daily via a background task
 
-The seed data is defined in `backend/app/seed.py` using deterministic UUIDs (`uuid5`). To capture the current local database state as a new seed:
+The seed data is defined in `backend/app/seed.py` using deterministic UUIDs (`uuid5`). To capture the current local database state as a new seed, run the export script inside the backend container:
 
 ```bash
-cd backend
-python -m scripts.export_seed > app/seed.py
+docker compose exec -T backend python -m scripts.export_seed > backend/app/seed.py
 ```
 
 ## Verification Steps
