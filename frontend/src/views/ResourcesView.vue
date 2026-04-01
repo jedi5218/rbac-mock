@@ -6,7 +6,7 @@
     </div>
 
     <!-- Org tree with resources -->
-    <div class="card" style="padding:8px">
+    <div style="background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.1);padding:12px">
       <div v-if="!orgs.length" style="color:#888;padding:8px;font-size:.9em">{{ t('resources.noResources') }}</div>
       <template v-else>
         <div v-for="root in roots" :key="root.id">
@@ -109,7 +109,7 @@ function orgName(id) { return orgs.value.find(o => o.id === id)?.name ?? id }
 
 // ── Org tree helpers ──────────────────────────────────────────────────────
 const collapsedOrgs = ref(new Set())
-const roots = computed(() => orgs.value.filter(o => !o.parent_id))
+const roots = computed(() => orgs.value.filter(o => !orgs.value.some(p => p.id === o.parent_id)))
 function childrenOf(orgId) { return orgs.value.filter(o => o.parent_id === orgId) }
 function toggleOrg(orgId) {
   const s = new Set(collapsedOrgs.value)
@@ -214,53 +214,52 @@ const OrgResourceNode = defineComponent({
       const hasContent = children.length > 0 || orgRes.length > 0
 
       const header = h('div', {
-        class: 'org-header',
-        style: `padding-left:${depth * 20 + 8}px`,
+        style: `display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9fb;border-left:3px solid #1e3a5f;border-radius:4px;margin-bottom:2px${hasContent ? ';cursor:pointer' : ''}`,
+        onClick: () => hasContent && toggleOrg(org.id),
       }, [
-        h('span', {
-          onClick: () => toggleOrg(org.id),
-          style: 'cursor:pointer;color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0',
-        }, hasContent ? (isCollapsed ? '▸' : '▾') : '•'),
-        h('span', { class: 'org-header-name' }, org.name),
+        h('span', { style: 'color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0' },
+          hasContent ? (isCollapsed ? '▸' : '▾') : ''),
+        h('span', { style: 'font-weight:600;flex:1;color:#1e3a5f' }, org.name),
         auth.isAdmin
           ? h('button', {
-              class: 'org-add-btn',
+              style: 'width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;border:none;cursor:pointer;font-size:1em;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0',
               onClick: (e) => { e.stopPropagation(); openCreate(org.id) },
             }, '+')
           : null,
       ])
 
-      if (isCollapsed) return h('div', [header])
+      const items = isCollapsed ? [] : [
+        ...orgRes.map(r =>
+          h('div', {
+            key: r.id,
+            style: `display:flex;align-items:center;gap:8px;padding:6px 10px 6px 28px;margin-bottom:1px;border-bottom:1px solid #f5f5f5${auth.isAdmin ? ';cursor:pointer' : ''}`,
+            onClick: () => auth.isAdmin && openEdit(r),
+          }, [
+            h('span', { style: 'font-weight:500;flex:1' }, r.name),
+            h('span', {
+              style: r.resource_type === 'document'
+                ? 'padding:2px 8px;border-radius:10px;font-size:.8em;flex-shrink:0;background:#e3f2fd;color:#1565c0'
+                : 'padding:2px 8px;border-radius:10px;font-size:.8em;flex-shrink:0;background:#fce4ec;color:#c62828',
+            }, r.resource_type),
+            auth.isAdmin
+              ? h('button', {
+                  style: 'padding:2px 8px;font-size:.8em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55;flex-shrink:0',
+                  onClick: (e) => { e.stopPropagation(); deleteResource(r) },
+                }, t('common.delete'))
+              : null,
+          ])
+        ),
+        ...children.map(child =>
+          h(OrgResourceNode, {
+            key: child.id,
+            org: child,
+            depth: depth + 1,
+            childrenOf, resourcesForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, deleteResource,
+          })
+        ),
+      ]
 
-      const resRows = orgRes.map(r =>
-        h('div', {
-          key: r.id,
-          class: 'res-row',
-          style: `padding-left:${depth * 20 + 30}px`,
-        }, [
-          h('span', { style: 'font-weight:500;flex:1' }, r.name),
-          h('span', {
-            class: r.resource_type === 'document' ? 'type-badge type-badge--doc' : 'type-badge type-badge--vid',
-          }, r.resource_type),
-          auth.isAdmin
-            ? h('div', { style: 'display:flex;gap:4px;flex-shrink:0' }, [
-                h('button', { class: 'btn-sm-outline', onClick: () => openEdit(r) }, t('common.edit')),
-                h('button', { class: 'btn-sm-danger', onClick: () => deleteResource(r) }, t('common.delete')),
-              ])
-            : null,
-        ])
-      )
-
-      const childNodes = children.map(child =>
-        h(OrgResourceNode, {
-          key: child.id,
-          org: child,
-          depth: depth + 1,
-          childrenOf, resourcesForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, deleteResource,
-        })
-      )
-
-      return h('div', [header, ...resRows, ...childNodes])
+      return h('div', { style: `margin-left:${depth === 0 ? 0 : 20}px;margin-bottom:4px` }, [header, ...items])
     }
   },
 })
@@ -269,30 +268,6 @@ export default { components: { OrgResourceNode } }
 </script>
 
 <style scoped>
-.card { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
-
-.org-header {
-  display:flex; align-items:center; gap:8px; padding:8px 10px;
-  background:#f0f4f8; border-radius:4px; margin-bottom:2px; font-size:.9em;
-}
-.org-header-name { font-weight:600; flex:1; color:#1e3a5f; }
-.org-add-btn {
-  width:22px; height:22px; border-radius:50%; background:#1e3a5f; color:#fff;
-  border:none; cursor:pointer; font-size:1em; line-height:1; display:flex;
-  align-items:center; justify-content:center; flex-shrink:0;
-}
-.org-add-btn:hover { background:#2a4a72; }
-
-.res-row {
-  display:flex; align-items:center; gap:8px; padding:6px 10px; margin-bottom:1px;
-  border-bottom:1px solid #f5f5f5;
-}
-.res-row:hover { background:#fafbfc; }
-
-.type-badge { padding:2px 8px; border-radius:10px; font-size:.8em; flex-shrink:0; }
-.type-badge--doc { background:#e3f2fd; color:#1565c0; }
-.type-badge--vid { background:#fce4ec; color:#c62828; }
-
 .perm-table { width:100%; border-collapse:collapse; margin-top:4px; }
 .perm-table th { padding:6px 8px; text-align:left; font-size:.8em; background:#f0f4f8; }
 .perm-table td { padding:6px 8px; border-top:1px solid #eee; vertical-align:middle; }
@@ -310,9 +285,6 @@ export default { components: { OrgResourceNode } }
   font-size:.78em; color:#888; margin-bottom:8px;
   padding:6px 10px; background:#f8f9fb; border-radius:4px;
 }
-
-.btn-sm-outline { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #1e3a5f; border-radius:3px; background:#fff; color:#1e3a5f; }
-.btn-sm-danger  { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #e55; border-radius:3px; background:#fff; color:#e55; }
 
 .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:100; }
 .modal { background:#fff; border-radius:8px; padding:24px; width:520px; max-width:95vw; max-height:90vh; overflow-y:auto; }

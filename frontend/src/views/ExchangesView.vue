@@ -235,7 +235,7 @@ async function load() {
   try {
     const [e, o, r] = await Promise.all([
       api.get('/exchanges/'),
-      api.get('/orgs/'),
+      api.get('/orgs/?all=true'),
       api.get('/roles/'),
     ])
     exchanges.value = e.data

@@ -173,9 +173,9 @@ async def add_inclusion(
         raise HTTPException(404, "Included role not found")
     if role_id == body.included_role_id:
         raise HTTPException(422, "A role cannot include itself")
+    _guard_org_role(included, "include")
 
     await _admin_owns_org(current_user, role.org_id, db)
-    # Public included roles can be used by anyone; private ones require scope
     await _can_use_role(current_user, included, db)
 
     if not await db.get(RoleInclusion, (role_id, body.included_role_id)):

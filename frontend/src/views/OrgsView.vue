@@ -69,7 +69,7 @@ const form = ref({ name: '', parent_id: '' })
 const editForm = ref({ name: '', parent_id: '' })
 const err = ref('')
 
-const roots = computed(() => orgs.value.filter(o => !o.parent_id))
+const roots = computed(() => orgs.value.filter(o => !orgs.value.some(p => p.id === o.parent_id)))
 
 async function load() {
   const res = await api.get('/orgs/')

@@ -10,6 +10,7 @@
       <router-link v-if="auth.isAdmin" to="/exchanges" style="color:#acd">{{ t('nav.exchanges') }}</router-link>
       <router-link to="/role-tree" style="color:#acd">{{ t('nav.roleTree') }}</router-link>
       <span style="margin-left:auto;font-size:0.85em">{{ auth.user?.username }}</span>
+      <button @click="resetDemo" style="cursor:pointer;background:#e8a735;border:none;color:#1e3a5f;padding:4px 10px;border-radius:4px;font-weight:600;font-size:.8em">{{ t('nav.resetDemo') }}</button>
       <!-- Language switcher -->
       <div class="lang-switcher">
         <button :class="['lang-btn', locale === 'en' && 'lang-btn--active']" @click="setLocale('en')">EN</button>
@@ -26,6 +27,7 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth.js'
+import api from './stores/api.js'
 
 const auth = useAuthStore()
 const { t, locale } = useI18n()
@@ -33,6 +35,22 @@ const { t, locale } = useI18n()
 function setLocale(lang) {
   locale.value = lang
   localStorage.setItem('locale', lang)
+}
+
+async function resetDemo() {
+  if (!confirm(t('reset.confirm'))) return
+  try {
+    await api.post('/reset')
+    alert(t('reset.success'))
+    auth.logout()
+    window.location.href = '/login'
+  } catch (e) {
+    if (e.response?.status === 429) {
+      alert(t('reset.rateLimit'))
+    } else {
+      alert(t('reset.error'))
+    }
+  }
 }
 </script>
 

@@ -1,7 +1,8 @@
 export default {
   nav: {
     orgs: 'Orgs', users: 'Users', roles: 'Roles', resources: 'Resources',
-    resolve: 'Resolve', exchanges: 'Exchanges', roleTree: 'Role Tree', logout: 'Logout',
+    resolve: 'Resolve', exchanges: 'Exchanges', roleTree: 'Role Tree',
+    resetDemo: 'Reset Demo', logout: 'Logout',
   },
   common: {
     name: 'Name', org: 'Org', type: 'Type', actions: 'Actions',
@@ -91,6 +92,12 @@ export default {
     noExposedRoles: 'No roles exposed yet',
     selectExchange: 'Select an exchange to view details',
     selectOrg: '— select org —',
+  },
+  reset: {
+    confirm: 'Reset all demo data to its initial state? You will be logged out.',
+    success: 'Demo data has been reset.',
+    rateLimit: 'Please wait before resetting again.',
+    error: 'Reset failed.',
   },
   wiki: { title: 'Wiki', notFound: 'Wiki page not found.', back: '← Back' },
   roleTree: {

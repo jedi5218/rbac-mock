@@ -2,7 +2,7 @@ export default {
   nav: {
     orgs: 'Організації', users: 'Користувачі', roles: 'Ролі',
     resources: 'Ресурси', resolve: 'Дозвіл', exchanges: 'Обміни',
-    roleTree: 'Дерево ролей', logout: 'Вийти',
+    roleTree: 'Дерево ролей', resetDemo: 'Скинути демо', logout: 'Вийти',
   },
   common: {
     name: 'Назва', org: 'Організація', type: 'Тип', actions: 'Дії',
@@ -95,6 +95,12 @@ export default {
     noExposedRoles: 'Ролі ще не надані',
     selectExchange: 'Оберіть обмін для перегляду деталей',
     selectOrg: '— оберіть організацію —',
+  },
+  reset: {
+    confirm: 'Скинути всі демо-дані до початкового стану? Вас буде розлогінено.',
+    success: 'Демо-дані скинуто.',
+    rateLimit: 'Зачекайте перед повторним скиданням.',
+    error: 'Помилка скидання.',
   },
   wiki: { title: 'Вікі', notFound: 'Сторінку вікі не знайдено.', back: '← Назад' },
   roleTree: {

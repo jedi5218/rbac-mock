@@ -6,7 +6,7 @@
     </div>
 
     <!-- Org tree with users -->
-    <div class="card" style="padding:8px">
+    <div style="background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.1);padding:12px">
       <div v-if="!orgs.length" style="color:#888;padding:8px;font-size:.9em">{{ t('users.noUsers') }}</div>
       <template v-else>
         <OrgUserNode
@@ -22,7 +22,6 @@
           :t="t"
           :open-create="openCreate"
           :open-edit="openEdit"
-          :open-roles="openRoles"
           :delete-user="deleteUser"
         />
       </template>
@@ -52,9 +51,9 @@
       </div>
     </div>
 
-    <!-- Edit user modal -->
+    <!-- Edit user modal (with roles management) -->
     <div v-if="editTarget" class="modal-backdrop">
-      <div class="modal">
+      <div class="modal" style="width:480px">
         <h3>{{ t('users.editTitle') }} — {{ editTarget.username }}</h3>
         <label>{{ t('login.username') }}</label>
         <input v-model="editForm.username" class="field" />
@@ -77,39 +76,32 @@
             <label><input type="checkbox" v-model="editForm.is_org_admin" /> {{ t('users.isOrgAdmin') }}</label>
           </div>
         </template>
-        <p v-if="editErr" style="color:red;margin-top:8px">{{ editErr }}</p>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button @click="editTarget=null" class="btn-cancel">{{ t('common.cancel') }}</button>
-          <button @click="saveEdit" class="btn-primary">{{ t('common.save') }}</button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Roles assignment modal -->
-    <div v-if="roleTarget" class="modal-backdrop">
-      <div class="modal" style="width:480px">
-        <h3>{{ t('users.manageRoles') }} — {{ roleTarget.username }}</h3>
-        <p style="margin-bottom:12px;font-size:.9em;color:#555">{{ t('users.assignedRoles') }}</p>
-        <div v-if="!assignedRoleIds.length" style="color:#888;margin-bottom:12px">{{ t('users.noRoles') }}</div>
-        <div v-for="r in allRoles.filter(r => assignedRoleIds.includes(r.id))" :key="r.id"
-             style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f0f4f8;border-radius:4px;margin-bottom:6px">
+        <!-- Roles section -->
+        <hr style="margin:4px 0 12px" />
+        <p style="margin-bottom:8px;font-size:.9em;color:#555;font-weight:500">{{ t('users.assignedRoles') }}</p>
+        <div v-if="!displayedRoles.length" style="color:#888;margin-bottom:12px;font-size:.9em">{{ t('users.noRoles') }}</div>
+        <div v-for="r in displayedRoles" :key="r.id"
+             style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f0f4f8;border-radius:4px;margin-bottom:6px;font-size:.9em">
           <span>{{ r.name }} <small style="color:#888">({{ orgName(r.org_id) }})</small></span>
-          <button @click="revokeRole(r.id)" style="padding:2px 8px;font-size:.8em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55">Revoke</button>
+          <button v-if="auth.isAdmin" @click="revokeRole(r.id)"
+            style="padding:2px 8px;font-size:.8em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55">Revoke</button>
         </div>
-        <hr style="margin:12px 0" />
-        <p style="margin-bottom:8px;font-size:.9em;color:#555">{{ t('users.assignRole') }}</p>
-        <div style="display:flex;gap:8px">
-          <select v-model="selectedRoleId" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px">
+        <div v-if="auth.isAdmin" style="display:flex;gap:8px;margin-bottom:8px">
+          <select v-model="selectedRoleId" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;font-size:.9em">
             <option value="">{{ t('users.selectRole') }}</option>
-            <option v-for="r in allRoles.filter(r => !assignedRoleIds.includes(r.id) && !r.is_org_role)" :key="r.id" :value="r.id">
+            <option v-for="r in assignableRoles" :key="r.id" :value="r.id">
               {{ r.name }} ({{ orgName(r.org_id) }})
             </option>
           </select>
-          <button @click="assignRole" :disabled="!selectedRoleId" style="padding:6px 12px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">{{ t('common.add') }}</button>
+          <button @click="assignRole" :disabled="!selectedRoleId" class="btn-primary" style="padding:6px 12px">{{ t('common.add') }}</button>
         </div>
-        <p v-if="roleErr" style="color:red;margin-top:8px">{{ roleErr }}</p>
-        <div style="text-align:right;margin-top:16px">
-          <button @click="roleTarget=null" class="btn-cancel">{{ t('common.close') }}</button>
+        <p v-if="roleErr" style="color:red;font-size:.85em">{{ roleErr }}</p>
+
+        <p v-if="editErr" style="color:red;margin-top:8px">{{ editErr }}</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button @click="editTarget=null" class="btn-cancel">{{ t('common.cancel') }}</button>
+          <button @click="saveEdit" class="btn-primary">{{ t('common.save') }}</button>
         </div>
       </div>
     </div>
@@ -136,16 +128,22 @@ const editTarget = ref(null)
 const editForm   = ref({ username: '', description: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
 const editErr    = ref('')
 
-const roleTarget      = ref(null)
 const assignedRoleIds = ref([])
 const selectedRoleId  = ref('')
 const roleErr         = ref('')
+
+const displayedRoles = computed(() =>
+  allRoles.value.filter(r => assignedRoleIds.value.includes(r.id) && !r.is_org_role)
+)
+const assignableRoles = computed(() =>
+  allRoles.value.filter(r => !assignedRoleIds.value.includes(r.id) && !r.is_org_role)
+)
 
 function orgName(id) { return orgs.value.find(o => o.id === id)?.name || id }
 
 // ── Org tree helpers ──────────────────────────────────────────────────────
 const collapsedOrgs = ref(new Set())
-const roots = computed(() => orgs.value.filter(o => !o.parent_id))
+const roots = computed(() => orgs.value.filter(o => !orgs.value.some(p => p.id === o.parent_id)))
 function childrenOf(orgId) { return orgs.value.filter(o => o.parent_id === orgId) }
 function toggleOrg(orgId) {
   const s = new Set(collapsedOrgs.value)
@@ -177,8 +175,10 @@ async function createUser() {
   } catch (e) { createErr.value = e.response?.data?.detail || 'Error' }
 }
 
-function openEdit(user) {
+async function openEdit(user) {
   editErr.value = ''
+  roleErr.value = ''
+  selectedRoleId.value = ''
   editTarget.value = user
   editForm.value = {
     username: user.username,
@@ -188,6 +188,7 @@ function openEdit(user) {
     is_superadmin: user.is_superadmin,
     is_org_admin: user.is_org_admin,
   }
+  await loadUserRoles(user.id)
 }
 
 async function saveEdit() {
@@ -217,13 +218,6 @@ async function deleteUser(user) {
   } catch (e) { alert(e.response?.data?.detail || 'Error') }
 }
 
-async function openRoles(user) {
-  roleTarget.value = user
-  roleErr.value = ''
-  selectedRoleId.value = ''
-  await loadUserRoles(user.id)
-}
-
 async function loadUserRoles(userId) {
   const res = await api.get(`/users/${userId}/roles`)
   assignedRoleIds.value = res.data.map(r => r.id)
@@ -232,17 +226,17 @@ async function loadUserRoles(userId) {
 async function assignRole() {
   roleErr.value = ''
   try {
-    await api.post(`/users/${roleTarget.value.id}/roles/${selectedRoleId.value}`)
+    await api.post(`/users/${editTarget.value.id}/roles/${selectedRoleId.value}`)
     selectedRoleId.value = ''
-    await loadUserRoles(roleTarget.value.id)
+    await loadUserRoles(editTarget.value.id)
   } catch (e) { roleErr.value = e.response?.data?.detail || 'Error' }
 }
 
 async function revokeRole(roleId) {
   roleErr.value = ''
   try {
-    await api.delete(`/users/${roleTarget.value.id}/roles/${roleId}`)
-    await loadUserRoles(roleTarget.value.id)
+    await api.delete(`/users/${editTarget.value.id}/roles/${roleId}`)
+    await loadUserRoles(editTarget.value.id)
   } catch (e) { roleErr.value = e.response?.data?.detail || 'Error' }
 }
 
@@ -254,72 +248,64 @@ import { defineComponent, h } from 'vue'
 
 const OrgUserNode = defineComponent({
   name: 'OrgUserNode',
-  props: ['org', 'depth', 'childrenOf', 'usersForOrg', 'collapsedOrgs', 'toggleOrg', 'auth', 't', 'openCreate', 'openEdit', 'openRoles', 'deleteUser'],
+  props: ['org', 'depth', 'childrenOf', 'usersForOrg', 'collapsedOrgs', 'toggleOrg', 'auth', 't', 'openCreate', 'openEdit', 'deleteUser'],
   setup(props) {
     return () => {
-      const { org, depth, childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, openRoles, deleteUser } = props
+      const { org, depth, childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, deleteUser } = props
       const children = childrenOf(org.id)
       const orgUsers = usersForOrg(org.id)
       const isCollapsed = collapsedOrgs.has(org.id)
       const hasContent = children.length > 0 || orgUsers.length > 0
 
       const header = h('div', {
-        class: 'org-header',
-        style: `padding-left:${depth * 20 + 8}px`,
+        style: `display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9fb;border-left:3px solid #1e3a5f;border-radius:4px;margin-bottom:2px${hasContent ? ';cursor:pointer' : ''}`,
+        onClick: () => hasContent && toggleOrg(org.id),
       }, [
-        h('span', {
-          onClick: () => toggleOrg(org.id),
-          style: 'cursor:pointer;color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0',
-        }, hasContent ? (isCollapsed ? '▸' : '▾') : '•'),
-        h('span', { class: 'org-header-name' }, org.name),
+        h('span', { style: 'color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0' },
+          hasContent ? (isCollapsed ? '▸' : '▾') : ''),
+        h('span', { style: 'font-weight:600;flex:1;color:#1e3a5f' }, org.name),
         auth.isSuperadmin
           ? h('button', {
-              class: 'org-add-btn',
+              style: 'width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;border:none;cursor:pointer;font-size:1em;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0',
               onClick: (e) => { e.stopPropagation(); openCreate(org.id) },
             }, '+')
           : null,
       ])
 
-      if (isCollapsed) return h('div', [header])
-
-      const userRows = orgUsers.map(u =>
-        h('div', {
-          key: u.id,
-          class: 'user-row',
-          style: `padding-left:${depth * 20 + 30}px`,
-        }, [
-          h('div', { style: 'flex:1;min-width:0' }, [
-            h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
-              h('span', { style: 'font-weight:500' }, u.username),
-              u.is_superadmin ? h('span', { class: 'flag flag--super' }, t('users.superadmin')) : null,
-              u.is_org_admin ? h('span', { class: 'flag flag--admin' }, t('users.orgAdmin')) : null,
+      const items = isCollapsed ? [] : [
+        ...orgUsers.map(u =>
+          h('div', {
+            key: u.id,
+            style: `display:flex;align-items:center;gap:8px;padding:6px 10px 6px 28px;margin-bottom:1px;border-bottom:1px solid #f5f5f5${auth.isAdmin ? ';cursor:pointer' : ''}`,
+            onClick: () => auth.isAdmin && openEdit(u),
+          }, [
+            h('div', { style: 'flex:1;min-width:0' }, [
+              h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+                h('span', { style: 'font-weight:500' }, u.username),
+                u.is_superadmin ? h('span', { style: 'padding:1px 6px;border-radius:10px;font-size:.75em;font-weight:600;background:#1e3a5f;color:#fff' }, t('users.superadmin')) : null,
+                u.is_org_admin ? h('span', { style: 'padding:1px 6px;border-radius:10px;font-size:.75em;font-weight:600;background:#2e7d32;color:#fff' }, t('users.orgAdmin')) : null,
+              ]),
+              u.description
+                ? h('div', { style: 'font-size:.78em;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, u.description)
+                : null,
             ]),
-            u.description
-              ? h('div', { style: 'font-size:.78em;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, u.description)
+            auth.isAdmin && u.id !== auth.user?.id
+              ? h('button', {
+                  style: 'padding:2px 8px;font-size:.8em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55;flex-shrink:0',
+                  onClick: (e) => { e.stopPropagation(); deleteUser(u) },
+                }, t('common.delete'))
               : null,
-          ]),
-          auth.isAdmin
-            ? h('div', { style: 'display:flex;gap:4px;flex-shrink:0' }, [
-                h('button', { class: 'btn-sm-outline', onClick: () => openEdit(u) }, t('common.edit')),
-                h('button', { class: 'btn-sm-outline', onClick: () => openRoles(u) }, t('users.rolesBtn')),
-                u.id !== auth.user?.id
-                  ? h('button', { class: 'btn-sm-danger', onClick: () => deleteUser(u) }, t('common.delete'))
-                  : null,
-              ])
-            : null,
-        ])
-      )
+          ])
+        ),
+        ...children.map(child =>
+          h(OrgUserNode, {
+            key: child.id, org: child, depth: depth + 1,
+            childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, deleteUser,
+          })
+        ),
+      ]
 
-      const childNodes = children.map(child =>
-        h(OrgUserNode, {
-          key: child.id,
-          org: child,
-          depth: depth + 1,
-          childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, openRoles, deleteUser,
-        })
-      )
-
-      return h('div', [header, ...userRows, ...childNodes])
+      return h('div', { style: `margin-left:${depth === 0 ? 0 : 20}px;margin-bottom:4px` }, [header, ...items])
     }
   },
 })
@@ -328,35 +314,8 @@ export default { components: { OrgUserNode } }
 </script>
 
 <style scoped>
-.card { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
-
-.org-header {
-  display:flex; align-items:center; gap:8px; padding:8px 10px;
-  background:#f0f4f8; border-radius:4px; margin-bottom:2px; font-size:.9em;
-}
-.org-header-name { font-weight:600; flex:1; color:#1e3a5f; }
-.org-add-btn {
-  width:22px; height:22px; border-radius:50%; background:#1e3a5f; color:#fff;
-  border:none; cursor:pointer; font-size:1em; line-height:1; display:flex;
-  align-items:center; justify-content:center; flex-shrink:0;
-}
-.org-add-btn:hover { background:#2a4a72; }
-
-.user-row {
-  display:flex; align-items:center; gap:8px; padding:6px 10px; margin-bottom:1px;
-  border-bottom:1px solid #f5f5f5;
-}
-.user-row:hover { background:#fafbfc; }
-
-.flag { padding:1px 6px; border-radius:10px; font-size:.75em; font-weight:600; }
-.flag--super { background:#1e3a5f; color:#fff; }
-.flag--admin { background:#2e7d32; color:#fff; }
-
-.btn-sm-outline { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #1e3a5f; border-radius:3px; background:#fff; color:#1e3a5f; }
-.btn-sm-danger  { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #e55; border-radius:3px; background:#fff; color:#e55; }
-
 .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100 }
-.modal { background:#fff;border-radius:8px;padding:24px;width:420px;max-width:95vw }
+.modal { background:#fff;border-radius:8px;padding:24px;width:420px;max-width:95vw;max-height:90vh;overflow-y:auto }
 .modal h3 { margin:0 0 16px }
 .field { display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box }
 .field:disabled { background:#f5f5f5; color:#888; }

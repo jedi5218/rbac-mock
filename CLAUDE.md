@@ -32,7 +32,8 @@ Full-stack RBAC demo: **FastAPI** backend + **Vue 3** frontend + **PostgreSQL**,
 - **Routers:** `app/routers/` — one module per domain: auth, organizations, users, resources, roles, resolve, exchanges
 - **Permissions engine:** `app/permissions.py` — recursive CTEs for cycle detection, effective permission resolution (BIT_OR aggregation with foreign propagation limits), org subtree scoping, and exchange-based role access checks
 - **Caching:** `app/cache.py` — in-memory dict cache for resolved permissions, keyed by user_id. Invalidated per-user on role assign/revoke, globally on role structure changes.
-- **Migrations:** Alembic in `backend/alembic/`. Backend container runs `alembic upgrade head` on startup. Migrations include seed data (admin user, root org).
+- **Migrations:** Alembic in `backend/alembic/`. Backend container runs `alembic upgrade head` on startup. Migrations handle schema only; seed data lives in `app/seed.py`.
+- **Seed / Reset:** `app/seed.py` defines demo data with deterministic UUIDs (`uuid5`) and an `async reset(db)` function that truncates all tables and re-inserts. Exposed via `POST /reset` (30s rate limit, no auth). A daily background task auto-resets. `scripts/export_seed.py` exports current DB state into seed.py format.
 
 ### Frontend (`frontend/`)
 
@@ -49,6 +50,7 @@ Full-stack RBAC demo: **FastAPI** backend + **Vue 3** frontend + **PostgreSQL**,
 - **Permission bitmasks:** Per resource-type encoding — document: read(1), write(2); video: view(1), comment(2), stream(4). Effective permissions are computed by BIT_OR across the role inclusion tree.
 - **Org exchanges:** Bilateral agreements between two orgs enabling cross-org role sharing. Each side exposes specific roles to the partner. Exchanges use canonical pair ordering (`org_a_id < org_b_id`) to prevent duplicates. Closing an exchange cascades deletion of dependent cross-org role inclusions.
 - **Foreign propagation limits:** When a cross-org boundary is crossed during role tree traversal, only roles from the crossed-into org's subtree may be followed further. This prevents transitive cross-org permission leaks (e.g., Org C including Org A's role won't gain Org B's permissions just because Org A included Org B). Tracked via `home_subtree_root` in the effective permissions CTE.
+- **Demo reset:** `POST /reset` truncates all tables and re-inserts seed data from `app/seed.py`. Rate-limited to once per 30 seconds. Also runs automatically every 24 hours via background task. Frontend has a "Reset Demo" button in the nav bar.
 
 ## Environment Variables (set in docker-compose.yml)
 

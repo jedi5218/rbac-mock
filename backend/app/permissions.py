@@ -52,19 +52,19 @@ async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict
     """
     sql = text("""
         WITH RECURSIVE
-        -- Pre-compute org descendant relationships
+        -- Pre-compute org descendant relationships (all UUIDs cast to text for uniform typing)
         org_descendants AS (
-            SELECT id AS root_id, id AS desc_id FROM organizations
+            SELECT id::text AS root_id, id::text AS desc_id FROM organizations
             UNION ALL
-            SELECT od.root_id, o.id
+            SELECT od.root_id, o.id::text
             FROM organizations o
-            JOIN org_descendants od ON o.parent_id = od.desc_id
+            JOIN org_descendants od ON o.parent_id::text = od.desc_id
         ),
 
         -- Walk the role inclusion tree with propagation tracking
         role_tree AS (
             -- Base: user's directly assigned roles (no boundary crossed)
-            SELECT r.id AS role_id, r.org_id,
+            SELECT r.id::text AS role_id, r.org_id::text AS org_id,
                    CAST(NULL AS TEXT) AS home_subtree_root
             FROM user_roles ur
             JOIN roles r ON r.id = ur.role_id
@@ -73,22 +73,22 @@ async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict
             UNION ALL
 
             -- Recursive: follow inclusions with propagation limits
-            SELECT r2.id, r2.org_id,
+            SELECT r2.id::text, r2.org_id::text,
                 CASE
                     -- Already crossed a boundary: keep the same home root
                     WHEN rt.home_subtree_root IS NOT NULL THEN rt.home_subtree_root
                     -- Same org: no crossing
-                    WHEN r2.org_id = rt.org_id THEN NULL
+                    WHEN r2.org_id::text = rt.org_id THEN NULL
                     -- Child org (in subtree): no crossing
                     WHEN EXISTS (
                         SELECT 1 FROM org_descendants
-                        WHERE root_id = rt.org_id AND desc_id = r2.org_id
+                        WHERE root_id = rt.org_id AND desc_id = r2.org_id::text
                     ) THEN NULL
                     -- Crossing into a foreign org: record as new home root
-                    ELSE r2.org_id
+                    ELSE r2.org_id::text
                 END
             FROM role_inclusions ri
-            JOIN role_tree rt ON ri.role_id = rt.role_id
+            JOIN role_tree rt ON ri.role_id::text = rt.role_id
             JOIN roles r2 ON ri.included_role_id = r2.id
             WHERE
                 -- No boundary crossed yet: allow any inclusion
@@ -96,7 +96,7 @@ async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict
                 -- Already crossed: only allow if included role is within home subtree
                 OR EXISTS (
                     SELECT 1 FROM org_descendants
-                    WHERE root_id = rt.home_subtree_root AND desc_id = r2.org_id
+                    WHERE root_id = rt.home_subtree_root AND desc_id = r2.org_id::text
                 )
         )
         SELECT
@@ -105,7 +105,7 @@ async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict
             res.resource_type,
             BIT_OR(rrp.permission_bits) AS bits
         FROM role_tree rt
-        JOIN role_resource_permissions rrp ON rrp.role_id = rt.role_id
+        JOIN role_resource_permissions rrp ON rrp.role_id::text = rt.role_id
         JOIN resources res ON res.id = rrp.resource_id
         GROUP BY res.id, res.name, res.resource_type
     """)

@@ -4,7 +4,9 @@ A demonstrative Role-Based Access Control system with:
 - Hierarchical org structure
 - Recursive role composition (DAG) with cycle detection
 - Resource-type-based permission bitmasks
+- Cross-org role sharing via bilateral exchanges
 - Web UI for full CRUD + effective-permission resolution
+- Resettable demo state with deterministic seed data
 
 ## Quick Start
 
@@ -89,6 +91,21 @@ fly status --app rbac-mock    # Check machine state and health
 fly open --app rbac-mock      # Open the app in your browser
 ```
 
+## Demo Reset
+
+The live demo can be reset to its initial state at any time:
+
+- **Frontend**: Click the "Reset Demo" button in the nav bar
+- **API**: `POST /reset` (no auth required, 30-second rate limit)
+- **Auto-reset**: Runs daily via a background task
+
+The seed data is defined in `backend/app/seed.py` using deterministic UUIDs (`uuid5`). To capture the current local database state as a new seed:
+
+```bash
+cd backend
+python -m scripts.export_seed > app/seed.py
+```
+
 ## Verification Steps
 
 1. `docker compose up` — all three services start clean
@@ -113,23 +130,26 @@ rbac-mock/
 ├── backend/                    # FastAPI + SQLAlchemy async + asyncpg
 │   ├── Dockerfile
 │   ├── pyproject.toml
-│   ├── alembic/               # DB migrations + seed data
+│   ├── alembic/               # DB migrations (schema only)
+│   ├── scripts/
+│   │   └── export_seed.py     # Export current DB → seed.py
 │   └── app/
-│       ├── main.py            # FastAPI app + CORS
+│       ├── main.py            # FastAPI app + CORS + /reset endpoint
 │       ├── database.py        # Async engine
-│       ├── models.py          # SQLAlchemy ORM (7 tables)
+│       ├── models.py          # SQLAlchemy ORM (9 tables)
 │       ├── schemas.py         # Pydantic v2
 │       ├── auth.py            # JWT + bcrypt
 │       ├── cache.py           # In-memory permission cache
 │       ├── permissions.py     # Cycle check, effective perms, admin scope
-│       └── routers/           # auth, orgs, users, resources, roles, resolve, interactions
+│       ├── seed.py            # Deterministic demo data + reset function
+│       └── routers/           # auth, orgs, users, resources, roles, resolve, exchanges
 └── frontend/                  # Vue 3 + Vite + Pinia + vue-i18n
     ├── Dockerfile
     ├── src/
     │   ├── i18n.js            # Internationalization setup (en/uk)
-    │   ├── locales/           # en.json, uk.json
+    │   ├── locales/           # en.js, uk.js
     │   ├── stores/            # Pinia auth store + Axios instance
     │   ├── router/            # Vue Router with auth guard
     │   └── views/             # Login, Orgs, Users, Roles, Resources, Resolve,
-    │                          # Interactions, RoleTree, Wiki
+    │                          # Exchanges, RoleTree, Wiki
 ```

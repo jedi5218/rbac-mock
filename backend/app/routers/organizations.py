@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models import Organization, User, Role, RoleInclusion, UserRole
 from app.schemas import OrgCreate, OrgUpdate, OrgOut
 from app.auth import get_current_user, require_superadmin
-from app.permissions import get_org_role
+from app.permissions import get_org_role, visible_org_ids
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
@@ -24,8 +24,20 @@ async def _create_org_role(db: AsyncSession, org_id: str, parent_id: str | None 
 
 
 @router.get("/", response_model=list[OrgOut])
-async def list_orgs(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    result = await db.execute(select(Organization))
+async def list_orgs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    all: bool = Query(False, description="Return all orgs (admins only; for exchange partner selection)"),
+):
+    # Admins may request all orgs for cross-org operations (e.g. exchange partner picker)
+    if all and (current_user.is_superadmin or current_user.is_org_admin):
+        result = await db.execute(select(Organization))
+        return result.scalars().all()
+    org_ids = await visible_org_ids(db, current_user)
+    if org_ids is None:
+        result = await db.execute(select(Organization))
+    else:
+        result = await db.execute(select(Organization).where(Organization.id.in_(org_ids)))
     return result.scalars().all()
 
 
