@@ -65,7 +65,6 @@ class Role(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
-    is_public   = Column(Boolean, default=False, nullable=False)
     is_org_role = Column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
@@ -122,3 +121,32 @@ class UserRole(Base):
 
     user = relationship("User", back_populates="user_roles")
     role = relationship("Role", back_populates="user_roles")
+
+
+class OrgExchange(Base):
+    __tablename__ = "org_exchanges"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    org_a_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    org_b_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_a_id", "org_b_id", name="uq_exchange_pair"),
+        CheckConstraint("org_a_id < org_b_id", name="ck_exchange_ordered_pair"),
+        CheckConstraint("org_a_id != org_b_id", name="ck_exchange_different_orgs"),
+    )
+
+    org_a = relationship("Organization", foreign_keys=[org_a_id])
+    org_b = relationship("Organization", foreign_keys=[org_b_id])
+    exposed_roles = relationship("ExchangeRole", back_populates="exchange", cascade="all, delete-orphan")
+
+
+class ExchangeRole(Base):
+    __tablename__ = "exchange_roles"
+
+    exchange_id = Column(UUID(as_uuid=False), ForeignKey("org_exchanges.id", ondelete="CASCADE"), primary_key=True)
+    role_id = Column(UUID(as_uuid=False), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+
+    exchange = relationship("OrgExchange", back_populates="exposed_roles")
+    role = relationship("Role")

@@ -96,19 +96,16 @@ class ResourceOut(BaseModel):
 class RoleCreate(BaseModel):
     name: str
     org_id: str
-    is_public: bool = False
 
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
-    is_public: Optional[bool] = None
 
 
 class RoleOut(BaseModel):
     id: str
     name: str
     org_id: str
-    is_public: bool
     is_org_role: bool
 
     model_config = {"from_attributes": True}
@@ -162,9 +159,9 @@ class RoleTreeNode(BaseModel):
     id: str
     name: str
     org_id: str
-    is_public: bool
     is_org_role: bool
     is_cycle: bool
+    is_propagation_blocked: bool = False
     included: list[RoleTreeNode]
 
 RoleTreeNode.model_rebuild()
@@ -176,24 +173,39 @@ class RoleTreeResponse(BaseModel):
     roles: list[RoleTreeNode]
 
 
-# ── Interactions ───────────────────────────────────────────────────────────────
+# ── Exchanges ─────────────────────────────────────────────────────────────────
 
-class RoleLink(BaseModel):
-    this_role_id: str
-    this_role_name: str
-    foreign_role_id: str
-    foreign_role_name: str
-    relation: str  # "includes" | "included_by"
-
-
-class OrgInteraction(BaseModel):
-    foreign_org_id: str
-    foreign_org_name: str
-    roles: list[RoleLink]
-
-
-class OrgInteractionsOut(BaseModel):
+class ExchangeCreate(BaseModel):
     org_id: str
-    org_name: str
-    parent_id: Optional[str]
-    interactions: list[OrgInteraction]
+    partner_org_id: str
+
+
+class ExchangeRoleOut(BaseModel):
+    role_id: str
+    role_name: str
+    role_org_id: str
+    role_org_name: str
+
+    model_config = {"from_attributes": True}
+
+
+class ExchangeOut(BaseModel):
+    id: str
+    org_a_id: str
+    org_a_name: str
+    org_b_id: str
+    org_b_name: str
+    created_at: datetime
+    exposed_roles: list[ExchangeRoleOut]
+
+    model_config = {"from_attributes": True}
+
+
+class ExposeRoleRequest(BaseModel):
+    role_id: str
+
+
+class ExchangeImpact(BaseModel):
+    inclusions_removed: int
+    partner_exposed_roles: int
+    partner_org_name: str

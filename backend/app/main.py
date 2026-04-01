@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, organizations, users, resources, roles, resolve, interactions
+from app.routers import auth, organizations, users, resources, roles, resolve, exchanges
 
 app = FastAPI(title="RBAC Mockup", version="0.1.0")
 
@@ -25,7 +25,7 @@ app.include_router(users.router)
 app.include_router(resources.router)
 app.include_router(roles.router)
 app.include_router(resolve.router)
-app.include_router(interactions.router)
+app.include_router(exchanges.router)
 
 
 @app.get("/health")

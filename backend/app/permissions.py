@@ -157,6 +157,51 @@ async def get_org_role(db: AsyncSession, org_id: str):
     return result.scalar_one_or_none()
 
 
+# ── Exchange helpers ──────────────────────────────────────────────────────────
+
+async def is_role_exposed_to_org(db: AsyncSession, role_id: str, admin_org_id: str) -> bool:
+    """Check if a role is exposed through any exchange to any org in admin's subtree."""
+    sql = text("""
+        WITH RECURSIVE subtree AS (
+            SELECT id FROM organizations WHERE id = :admin_org_id
+            UNION
+            SELECT o.id FROM organizations o JOIN subtree s ON o.parent_id = s.id
+        )
+        SELECT 1
+        FROM exchange_roles er
+        JOIN org_exchanges ex ON ex.id = er.exchange_id
+        JOIN roles r ON r.id = er.role_id
+        WHERE er.role_id = :role_id
+          AND (
+              (r.org_id = ex.org_a_id AND ex.org_b_id IN (SELECT id FROM subtree))
+              OR
+              (r.org_id = ex.org_b_id AND ex.org_a_id IN (SELECT id FROM subtree))
+          )
+        LIMIT 1
+    """)
+    result = await db.execute(sql, {"role_id": role_id, "admin_org_id": admin_org_id})
+    return result.scalar() is not None
+
+
+async def get_exchanged_role_ids(db: AsyncSession, admin_org_id: str) -> list[str]:
+    """Return IDs of roles exposed to any org in the admin's subtree via exchanges."""
+    sql = text("""
+        WITH RECURSIVE subtree AS (
+            SELECT id FROM organizations WHERE id = :admin_org_id
+            UNION
+            SELECT o.id FROM organizations o JOIN subtree s ON o.parent_id = s.id
+        )
+        SELECT DISTINCT er.role_id
+        FROM exchange_roles er
+        JOIN org_exchanges ex ON ex.id = er.exchange_id
+        JOIN roles r ON r.id = er.role_id
+        WHERE (r.org_id = ex.org_a_id AND ex.org_b_id IN (SELECT id FROM subtree))
+           OR (r.org_id = ex.org_b_id AND ex.org_a_id IN (SELECT id FROM subtree))
+    """)
+    result = await db.execute(sql, {"admin_org_id": admin_org_id})
+    return [str(row[0]) for row in result.fetchall()]
+
+
 # ── Cross-org interactions ─────────────────────────────────────────────────────
 
 async def get_interactions(db: AsyncSession, org_ids: list[str]) -> dict[str, dict]:
