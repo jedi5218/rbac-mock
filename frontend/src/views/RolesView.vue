@@ -95,7 +95,7 @@
               <option
                 v-for="r in roles.filter(r => r.id !== selected.id && !inclusions.find(i => i.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
+              >{{ isForeign(r) ? '⮂ ' : '' }}{{ formatRole(r) }}</option>
             </select>
             <button @click="addInclusion" :disabled="!newIncId" class="btn-sm btn-primary">{{ t('common.add') }}</button>
           </div>
@@ -118,7 +118,7 @@
               <option
                 v-for="r in parentCandidates.filter(r => r.id !== selected.id && !parents.find(p => p.id === r.id))"
                 :key="r.id" :value="r.id"
-              >{{ isForeign(r) ? '⊕ ' : '' }}{{ formatRole(r) }}</option>
+              >{{ isForeign(r) ? '⮂ ' : '' }}{{ formatRole(r) }}</option>
             </select>
             <button @click="addParent" :disabled="!newParentId" class="btn-sm btn-primary">{{ t('common.add') }}</button>
           </div>
@@ -316,7 +316,7 @@ async function load() {
   const [r, pc, o, res] = await Promise.all([
     api.get('/roles/'),
     api.get('/roles/?include_exchanged=true'),
-    api.get('/orgs/'),
+    api.get('/orgs/?all=true'),
     api.get('/resources/'),
   ])
   roles.value            = r.data
