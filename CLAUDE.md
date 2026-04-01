@@ -84,7 +84,7 @@ Internet → nginx :8080
 
 | File | Purpose |
 |---|---|
-| `fly.toml` | Fly app config — region (`iad`), VM size (`shared-cpu-1x`, 512MB), health checks, auto-stop/start |
+| `fly.toml` | Fly app config — region (`fra`), VM size (`shared-cpu-1x`, 512MB), health checks, auto-stop/start |
 | `Dockerfile.fly` | Multi-stage build: Stage 1 builds Vue frontend (`node:20-slim`), Stage 2 runs Python + nginx + supervisor (`python:3.12-slim`) |
 | `nginx.conf` | Serves SPA with history-mode fallback, proxies `/api/` to uvicorn with prefix stripping, caches hashed assets |
 | `supervisord.conf` | Manages nginx and uvicorn as foreground processes (PID 1) |
@@ -97,14 +97,18 @@ Fly Postgres sets `DATABASE_URL` as `postgres://user:pass@host:5432/db?sslmode=d
 1. **Wrong scheme** — asyncpg needs `postgresql+asyncpg://`, not `postgres://`
 2. **`sslmode` param** — asyncpg doesn't accept `sslmode`; use `ssl=disable` instead
 
-After `fly postgres attach`, override the secret manually:
+After `fly postgres attach`, override the secret manually. The attach output prints the password — save it. If you missed it, reset it:
 
 ```bash
-# Get connection details from the Fly Postgres app
-fly ssh console --app rbac-mock-db -C "env" | grep -i password
+# Generate a new secure password
+NEW_PW=$(openssl rand -base64 24)
 
-# Set the corrected URL (replace user/pass/host with actual values)
-fly secrets set DATABASE_URL="postgresql+asyncpg://rbac_mock:<password>@top2.nearest.of.rbac-mock-db.internal:5432/rbac_mock?ssl=disable" --app rbac-mock
+# Reset the database user password
+echo "ALTER USER rbac_mock WITH PASSWORD '${NEW_PW}';" \
+  | fly postgres connect --app rbac-mock-db --database rbac_mock
+
+# Set the corrected URL
+fly secrets set DATABASE_URL="postgresql+asyncpg://rbac_mock:${NEW_PW}@top2.nearest.of.rbac-mock-db.internal:5432/rbac_mock?ssl=disable" --app rbac-mock
 ```
 
 ### Secrets vs Environment

@@ -44,21 +44,27 @@ fly auth login
 fly apps create rbac-mock
 
 # 3. Create a Fly Postgres database (unmanaged, single node)
-fly postgres create --name rbac-mock-db --region iad \
+fly postgres create --name rbac-mock-db --region fra \
   --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 
 # 4. Attach the database to the app
 fly postgres attach rbac-mock-db --app rbac-mock
 ```
 
-> **Important: Fix DATABASE_URL.** The `fly postgres attach` command sets `DATABASE_URL` with a `postgres://` scheme and `?sslmode=disable`, but asyncpg requires `postgresql+asyncpg://` and rejects `sslmode`. You must override it:
+> **Important: Fix DATABASE_URL.** The `fly postgres attach` command sets `DATABASE_URL` with a `postgres://` scheme and `?sslmode=disable`, but asyncpg requires `postgresql+asyncpg://` and rejects `sslmode`. You must override it manually.
+>
+> The `fly postgres attach` output prints the password — save it. If you missed it, reset the password:
 >
 > ```bash
-> # Find connection details (look for user/password in output)
-> fly ssh console --app rbac-mock-db -C "env"
+> # Generate a new secure password
+> NEW_PW=$(openssl rand -base64 24)
 >
-> # Set the corrected URL
-> fly secrets set DATABASE_URL="postgresql+asyncpg://rbac_mock:<password>@top2.nearest.of.rbac-mock-db.internal:5432/rbac_mock?ssl=disable" --app rbac-mock
+> # Reset the database user password
+> echo "ALTER USER rbac_mock WITH PASSWORD '${NEW_PW}';" \
+>   | fly postgres connect --app rbac-mock-db --database rbac_mock
+>
+> # Set the corrected URL (asyncpg-compatible scheme, ssl instead of sslmode)
+> fly secrets set DATABASE_URL="postgresql+asyncpg://rbac_mock:${NEW_PW}@top2.nearest.of.rbac-mock-db.internal:5432/rbac_mock?ssl=disable" --app rbac-mock
 > ```
 
 ```bash
