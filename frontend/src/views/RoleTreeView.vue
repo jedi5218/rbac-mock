@@ -42,6 +42,7 @@
           :is-direct="true"
           :hierarchy-org-ids="hierarchyOrgIds"
           :org-name-fn="orgName"
+          :role-name-fn="roleDisplayName"
         />
       </div>
     </div>
@@ -67,6 +68,7 @@ const err     = ref('')
 const selectedUserId = ref('')
 
 function orgName(id) { return orgs.value.find(o => o.id === id)?.name || id }
+function roleDisplayName(node) { return node.is_org_role ? t('roles.allMembers') : node.name }
 
 const targetOrgId = computed(() =>
   users.value.find(u => u.id === selectedUserId.value)?.org_id || auth.user?.org_id || ''
@@ -126,12 +128,12 @@ import { defineComponent, h, ref } from 'vue'
 
 const RoleTreeNode = defineComponent({
   name: 'RoleTreeNode',
-  props: ['node', 'depth', 'isDirect', 'hierarchyOrgIds', 'orgNameFn'],
+  props: ['node', 'depth', 'isDirect', 'hierarchyOrgIds', 'orgNameFn', 'roleNameFn'],
   setup(props) {
     const open = ref(true)
 
     return () => {
-      const { node, depth, isDirect, hierarchyOrgIds, orgNameFn } = props
+      const { node, depth, isDirect, hierarchyOrgIds, orgNameFn, roleNameFn } = props
       const hasChildren = node.included.length > 0
       const isForeign = hierarchyOrgIds !== null && !hierarchyOrgIds.has(node.org_id)
 
@@ -151,7 +153,7 @@ const RoleTreeNode = defineComponent({
         // Role name
         h('span', {
           style: `font-weight:${isDirect ? '600' : '400'};${node.is_propagation_blocked ? 'opacity:.5;text-decoration:line-through' : ''}`,
-        }, node.name),
+        }, roleNameFn ? roleNameFn(node) : node.name),
 
         // Org name
         h('span', { style: 'font-size:.78em;color:#888' }, orgNameFn(node.org_id)),
@@ -180,6 +182,7 @@ const RoleTreeNode = defineComponent({
               isDirect: false,
               hierarchyOrgIds,
               orgNameFn,
+              roleNameFn,
             })
           )
         : []

@@ -20,7 +20,7 @@ Use the **Roles** button on any user row to assign or revoke roles. Note:
 
 ## Editing users
 
-Click **Edit** to modify a user's name, email, or password.
+Click **Edit** to modify a user's name, description, or password.
 
 - **Superadmins** can also change the user's org and flags.
 - **Org admins** can toggle the `is_org_admin` flag for users in their subtree.

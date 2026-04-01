@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -40,18 +40,18 @@ class OrgOut(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
-    email: EmailStr
     password: str
     org_id: str
+    description: Optional[str] = None
     is_superadmin: bool = False
     is_org_admin: bool = False
 
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
-    email: Optional[EmailStr] = None
     password: Optional[str] = None
     org_id: Optional[str] = None
+    description: Optional[str] = None
     is_superadmin: Optional[bool] = None
     is_org_admin: Optional[bool] = None
 
@@ -59,7 +59,7 @@ class UserUpdate(BaseModel):
 class UserOut(BaseModel):
     id: str
     username: str
-    email: str
+    description: Optional[str]
     org_id: str
     is_superadmin: bool
     is_org_admin: bool

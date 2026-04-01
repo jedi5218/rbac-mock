@@ -58,7 +58,7 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db), _: U
         raise HTTPException(404, "Org not found")
     user = User(
         username=body.username,
-        email=body.email,
+        description=body.description,
         password_hash=hash_password(body.password),
         org_id=body.org_id,
         is_superadmin=body.is_superadmin,
@@ -96,8 +96,8 @@ async def update_user(
 
     if body.username is not None:
         user.username = body.username
-    if body.email is not None:
-        user.email = body.email
+    if body.description is not None:
+        user.description = body.description
     if body.password is not None:
         user.password_hash = hash_password(body.password)
 

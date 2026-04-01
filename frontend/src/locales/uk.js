@@ -25,7 +25,8 @@ export default {
   },
   users: {
     title: 'Користувачі', new: '+ Новий користувач',
-    email: 'Електронна пошта', password: 'Пароль',
+    description: 'Опис', descriptionHint: 'Необов\'язковий опис',
+    password: 'Пароль',
     newPassword: 'Новий пароль', keepBlank: '(залишити порожнім)',
     flags: 'Позначки', superadmin: 'суперадмін', orgAdmin: 'адмін-орг',
     isSuperadmin: 'Суперадмін', isOrgAdmin: 'Адміністратор організації',
@@ -37,7 +38,7 @@ export default {
   },
   roles: {
     title: 'Ролі', new: '+ Нова роль',
-    orgMember: 'члени-орг',
+    allMembers: 'Усі учасники', orgMember: 'члени-орг',
     orgMemberNotice: 'Це автоматично керована роль членів організації. Її список відображає всіх членів {org} і оновлюється автоматично. Вона не може мати батьківських ролей.',
     createTitle: 'Створити роль', noRoles: 'Немає ролей',
     selectRole: 'Оберіть роль для перегляду деталей',

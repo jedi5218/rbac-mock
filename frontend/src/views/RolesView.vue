@@ -1,35 +1,39 @@
 <template>
   <div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <h2 style="margin:0">{{ t('roles.title') }}</h2>
-        <router-link to="/wiki/roles" class="help-link" :title="t('common.help')">?</router-link>
-      </div>
-      <button v-if="auth.isAdmin" @click="showCreate=true" class="btn-primary">{{ t('roles.new') }}</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <h2 style="margin:0">{{ t('roles.title') }}</h2>
+      <router-link to="/wiki/roles" class="help-link" :title="t('common.help')">?</router-link>
     </div>
 
     <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;align-items:start">
-      <!-- ── Role list ────────────────────────────────────── -->
+      <!-- ── Role list (org tree) ─────────────────────────── -->
       <div class="card" style="padding:8px">
-        <div
-          v-for="r in roles" :key="r.id"
-          @click="selectRole(r)"
-          :class="['role-item', selected?.id === r.id && 'role-item--active']"
-        >
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-weight:500">{{ r.name }}</span>
-            <span v-if="r.is_org_role" class="badge badge--sys" title="Auto-managed org-member role">org</span>
+        <div v-if="!orgs.length" style="color:#888;padding:8px;font-size:.9em">{{ t('roles.noRoles') }}</div>
+        <template v-else>
+          <div v-for="root in orgRoots" :key="root.id">
+            <OrgRoleNode
+              :org="root"
+              :depth="0"
+              :children-of="orgChildrenOf"
+              :roles-for-org="sortedRolesForOrg"
+              :collapsed-orgs="collapsedOrgs"
+              :toggle-org="toggleOrg"
+              :auth="auth"
+              :t="t"
+              :selected="selected"
+              :select-role="selectRole"
+              :open-create-for-org="openCreateForOrg"
+              :role-display-name="roleDisplayName"
+            />
           </div>
-          <div style="font-size:.78em;color:#888">{{ orgName(r.org_id) }}</div>
-        </div>
-        <div v-if="!roles.length" style="color:#888;padding:8px;font-size:.9em">{{ t('roles.noRoles') }}</div>
+        </template>
       </div>
 
       <!-- ── Role detail ─────────────────────────────────── -->
       <div v-if="selected" class="card" style="padding:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
           <h3 style="margin:0;display:flex;align-items:center;gap:8px">
-            {{ selected.name }}
+            {{ roleDisplayName(selected) }}
             <span v-if="selected.is_org_role" class="badge badge--sys">{{ t('roles.orgMember') }}</span>
             <span style="font-weight:normal;color:#888;font-size:.75em">{{ orgName(selected.org_id) }}</span>
           </h3>
@@ -177,9 +181,7 @@
         <label>{{ t('common.name') }}</label>
         <input v-model="form.name" class="field" />
         <label>{{ t('common.org') }}</label>
-        <select v-model="form.org_id" class="field">
-          <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
-        </select>
+        <input :value="orgName(form.org_id)" class="field" disabled />
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button @click="showCreate=false" class="btn-cancel">{{ t('common.cancel') }}</button>
           <button @click="createRole" class="btn-primary">{{ t('common.create') }}</button>
@@ -230,12 +232,38 @@ function bitsFor(resourceType) {
   return BITS[resourceType] ?? []
 }
 
+// ── Org tree helpers ──────────────────────────────────────────────────────
+const collapsedOrgs = ref(new Set())
+const orgRoots = computed(() => orgs.value.filter(o => !o.parent_id))
+function orgChildrenOf(orgId) { return orgs.value.filter(o => o.parent_id === orgId) }
+function toggleOrg(orgId) {
+  const s = new Set(collapsedOrgs.value)
+  s.has(orgId) ? s.delete(orgId) : s.add(orgId)
+  collapsedOrgs.value = s
+}
+function sortedRolesForOrg(orgId) {
+  return roles.value
+    .filter(r => r.org_id === orgId)
+    .sort((a, b) => {
+      if (a.is_org_role !== b.is_org_role) return a.is_org_role ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+}
+function roleDisplayName(r) {
+  return r.is_org_role ? t('roles.allMembers') : r.name
+}
+function openCreateForOrg(orgId) {
+  form.value = { name: '', org_id: orgId }
+  err.value = ''
+  showCreate.value = true
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function orgName(id) { return orgs.value.find(o => o.id === id)?.name ?? id }
 
 function formatRole(r) {
   const org = orgName(r.org_id)
-  return r.is_org_role ? org : `${org}:${r.name}`
+  return r.is_org_role ? `${org} (${t('roles.allMembers')})` : `${org}:${r.name}`
 }
 
 // Set of org IDs that are in the current user's own-org + ancestors + descendants.
@@ -296,7 +324,7 @@ async function load() {
   parentCandidates.value = pc.data
   orgs.value             = o.data
   resources.value        = res.data
-  if (!form.value.org_id && o.data.length) form.value.org_id = o.data[0].id
+  // org_id is set by openCreateForOrg()
 }
 
 async function selectRole(r) {
@@ -404,8 +432,88 @@ async function toggleBit(resource, bit) {
 onMounted(load)
 </script>
 
+<script>
+import { defineComponent, h } from 'vue'
+
+const OrgRoleNode = defineComponent({
+  name: 'OrgRoleNode',
+  props: ['org', 'depth', 'childrenOf', 'rolesForOrg', 'collapsedOrgs', 'toggleOrg', 'auth', 't', 'selected', 'selectRole', 'openCreateForOrg', 'roleDisplayName'],
+  setup(props) {
+    return () => {
+      const { org, depth, childrenOf, rolesForOrg, collapsedOrgs, toggleOrg, auth, t, selected, selectRole, openCreateForOrg, roleDisplayName } = props
+      const children = childrenOf(org.id)
+      const orgRoles = rolesForOrg(org.id)
+      const isCollapsed = collapsedOrgs.has(org.id)
+      const hasContent = children.length > 0 || orgRoles.length > 0
+
+      const header = h('div', {
+        class: 'org-header',
+        style: `padding-left:${depth * 16 + 4}px`,
+      }, [
+        h('span', {
+          onClick: () => toggleOrg(org.id),
+          style: 'cursor:pointer;color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0',
+        }, hasContent ? (isCollapsed ? '▸' : '▾') : '•'),
+        h('span', { class: 'org-header-name' }, org.name),
+        auth.isAdmin
+          ? h('button', {
+              class: 'org-add-btn',
+              onClick: (e) => { e.stopPropagation(); openCreateForOrg(org.id) },
+              title: t('roles.new'),
+            }, '+')
+          : null,
+      ])
+
+      if (isCollapsed) return h('div', [header])
+
+      const roleItems = orgRoles.map(r =>
+        h('div', {
+          key: r.id,
+          class: ['role-item', selected?.id === r.id && 'role-item--active'],
+          style: `padding-left:${depth * 16 + 22}px`,
+          onClick: () => selectRole(r),
+        }, [
+          h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+            h('span', { style: `font-weight:500;${r.is_org_role ? 'font-style:italic' : ''}` }, roleDisplayName(r)),
+            r.is_org_role
+              ? h('span', { class: 'badge badge--sys', title: 'Auto-managed org-member role' }, 'org')
+              : null,
+          ]),
+        ])
+      )
+
+      const childNodes = children.map(child =>
+        h(OrgRoleNode, {
+          key: child.id,
+          org: child,
+          depth: depth + 1,
+          childrenOf, rolesForOrg, collapsedOrgs, toggleOrg, auth, t, selected, selectRole, openCreateForOrg, roleDisplayName,
+        })
+      )
+
+      return h('div', [header, ...roleItems, ...childNodes])
+    }
+  },
+})
+
+export default { components: { OrgRoleNode } }
+</script>
+
 <style scoped>
 .card { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+
+/* Org tree headers */
+.org-header {
+  display:flex; align-items:center; gap:6px; padding:6px 8px;
+  background:#f0f4f8; border-radius:4px; margin-bottom:2px; font-size:.85em;
+}
+.org-header-name { font-weight:600; flex:1; color:#1e3a5f; }
+.org-add-btn {
+  width:20px; height:20px; border-radius:50%; background:#1e3a5f; color:#fff;
+  border:none; cursor:pointer; font-size:.9em; line-height:1; display:flex;
+  align-items:center; justify-content:center; flex-shrink:0;
+}
+.org-add-btn:hover { background:#2a4a72; }
 
 /* Role list */
 .role-item {
@@ -466,7 +574,8 @@ onMounted(load)
 
 /* Form helpers */
 .select-sm { padding:5px 8px; border:1px solid #ccc; border-radius:4px; flex:1; font-size:.9em; }
-.field { display:block; width:100%; padding:7px; margin:4px 0 14px; border:1px solid #ccc; border-radius:4px; }
+.field { display:block; width:100%; padding:7px; margin:4px 0 14px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
+.field:disabled { background:#f5f5f5; color:#888; }
 .err-msg { color:#c00; font-size:.85em; margin-top:6px; }
 
 /* Buttons */

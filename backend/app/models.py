@@ -32,7 +32,7 @@ class User(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     username = Column(Text, unique=True, nullable=False)
-    email = Column(Text, unique=True, nullable=False)
+    description = Column(Text, nullable=True)
     password_hash = Column(Text, nullable=False)
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)

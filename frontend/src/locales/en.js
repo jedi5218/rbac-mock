@@ -21,7 +21,8 @@ export default {
     editTitle: 'Edit Organization',
   },
   users: {
-    title: 'Users', new: '+ New User', email: 'Email',
+    title: 'Users', new: '+ New User',
+    description: 'Description', descriptionHint: 'Optional description',
     password: 'Password', newPassword: 'New password',
     keepBlank: '(leave blank to keep)', flags: 'Flags',
     superadmin: 'superadmin', orgAdmin: 'org-admin',
@@ -33,7 +34,7 @@ export default {
   },
   roles: {
     title: 'Roles', new: '+ New Role',
-    orgMember: 'org-member',
+    allMembers: 'All members', orgMember: 'org-member',
     orgMemberNotice: 'This is an auto-managed org-member role. Its user list mirrors all members of {org} and updates automatically. It cannot have parent roles.',
     createTitle: 'Create Role', noRoles: 'No roles',
     selectRole: 'Select a role to view details',

@@ -1,43 +1,32 @@
 <template>
   <div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <h2 style="margin:0">{{ t('users.title') }}</h2>
-        <router-link to="/wiki/users" class="help-link" :title="t('common.help')">?</router-link>
-      </div>
-      <button v-if="auth.isSuperadmin" @click="openCreate" style="padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer">{{ t('users.new') }}</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <h2 style="margin:0">{{ t('users.title') }}</h2>
+      <router-link to="/wiki/users" class="help-link" :title="t('common.help')">?</router-link>
     </div>
 
-    <table style="width:100%;background:#fff;border-radius:8px;border-collapse:collapse;box-shadow:0 1px 4px rgba(0,0,0,.1)">
-      <thead>
-        <tr style="background:#f0f4f8">
-          <th style="padding:10px;text-align:left">{{ t('login.username') }}</th>
-          <th style="padding:10px;text-align:left">{{ t('users.email') }}</th>
-          <th style="padding:10px;text-align:left">{{ t('common.org') }}</th>
-          <th style="padding:10px;text-align:left">{{ t('users.flags') }}</th>
-          <th style="padding:10px;text-align:left">{{ t('common.actions') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="u in users" :key="u.id" style="border-top:1px solid #eee">
-          <td style="padding:10px">{{ u.username }}</td>
-          <td style="padding:10px">{{ u.email }}</td>
-          <td style="padding:10px">{{ orgName(u.org_id) }}</td>
-          <td style="padding:10px">
-            <span v-if="u.is_superadmin" style="background:#1e3a5f;color:#fff;padding:2px 6px;border-radius:10px;font-size:.8em;margin-right:4px">{{ t('users.superadmin') }}</span>
-            <span v-if="u.is_org_admin" style="background:#2e7d32;color:#fff;padding:2px 6px;border-radius:10px;font-size:.8em">{{ t('users.orgAdmin') }}</span>
-          </td>
-          <td style="padding:10px;display:flex;gap:6px">
-            <button v-if="auth.isAdmin" @click="openEdit(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #1e3a5f;border-radius:3px;background:#fff;color:#1e3a5f">{{ t('common.edit') }}</button>
-            <button v-if="auth.isAdmin" @click="openRoles(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #555;border-radius:3px;background:#fff;color:#555">{{ t('users.rolesBtn') }}</button>
-            <button v-if="auth.isAdmin && u.id !== auth.user?.id" @click="deleteUser(u)" style="padding:2px 8px;font-size:.85em;cursor:pointer;border:1px solid #e55;border-radius:3px;background:#fff;color:#e55">{{ t('common.delete') }}</button>
-          </td>
-        </tr>
-        <tr v-if="!users.length">
-          <td colspan="5" style="padding:16px;text-align:center;color:#888">{{ t('users.noUsers') }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Org tree with users -->
+    <div class="card" style="padding:8px">
+      <div v-if="!orgs.length" style="color:#888;padding:8px;font-size:.9em">{{ t('users.noUsers') }}</div>
+      <template v-else>
+        <OrgUserNode
+          v-for="root in roots"
+          :key="root.id"
+          :org="root"
+          :depth="0"
+          :children-of="childrenOf"
+          :users-for-org="usersForOrg"
+          :collapsed-orgs="collapsedOrgs"
+          :toggle-org="toggleOrg"
+          :auth="auth"
+          :t="t"
+          :open-create="openCreate"
+          :open-edit="openEdit"
+          :open-roles="openRoles"
+          :delete-user="deleteUser"
+        />
+      </template>
+    </div>
 
     <!-- Create user modal -->
     <div v-if="showCreate" class="modal-backdrop">
@@ -45,14 +34,12 @@
         <h3>{{ t('users.createTitle') }}</h3>
         <label>{{ t('login.username') }}</label>
         <input v-model="createForm.username" class="field" />
-        <label>{{ t('users.email') }}</label>
-        <input v-model="createForm.email" class="field" />
+        <label>{{ t('users.description') }}</label>
+        <input v-model="createForm.description" class="field" :placeholder="t('users.descriptionHint')" />
         <label>{{ t('users.password') }}</label>
         <input type="password" v-model="createForm.password" class="field" />
         <label>{{ t('common.org') }}</label>
-        <select v-model="createForm.org_id" class="field">
-          <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
-        </select>
+        <input :value="orgName(createForm.org_id)" class="field" disabled />
         <div style="display:flex;gap:12px;margin-bottom:12px">
           <label><input type="checkbox" v-model="createForm.is_superadmin" /> {{ t('users.isSuperadmin') }}</label>
           <label><input type="checkbox" v-model="createForm.is_org_admin" /> {{ t('users.isOrgAdmin') }}</label>
@@ -71,8 +58,8 @@
         <h3>{{ t('users.editTitle') }} — {{ editTarget.username }}</h3>
         <label>{{ t('login.username') }}</label>
         <input v-model="editForm.username" class="field" />
-        <label>{{ t('users.email') }}</label>
-        <input v-model="editForm.email" class="field" />
+        <label>{{ t('users.description') }}</label>
+        <input v-model="editForm.description" class="field" :placeholder="t('users.descriptionHint')" />
         <label>{{ t('users.newPassword') }} <small style="color:#888">{{ t('users.keepBlank') }}</small></label>
         <input type="password" v-model="editForm.password" class="field" placeholder="unchanged" />
         <template v-if="auth.isSuperadmin">
@@ -130,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 import api from '../stores/api.js'
@@ -142,11 +129,11 @@ const orgs     = ref([])
 const allRoles = ref([])
 
 const showCreate = ref(false)
-const createForm = ref({ username: '', email: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
+const createForm = ref({ username: '', description: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
 const createErr  = ref('')
 
 const editTarget = ref(null)
-const editForm   = ref({ username: '', email: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
+const editForm   = ref({ username: '', description: '', password: '', org_id: '', is_superadmin: false, is_org_admin: false })
 const editErr    = ref('')
 
 const roleTarget      = ref(null)
@@ -156,6 +143,18 @@ const roleErr         = ref('')
 
 function orgName(id) { return orgs.value.find(o => o.id === id)?.name || id }
 
+// ── Org tree helpers ──────────────────────────────────────────────────────
+const collapsedOrgs = ref(new Set())
+const roots = computed(() => orgs.value.filter(o => !o.parent_id))
+function childrenOf(orgId) { return orgs.value.filter(o => o.parent_id === orgId) }
+function toggleOrg(orgId) {
+  const s = new Set(collapsedOrgs.value)
+  s.has(orgId) ? s.delete(orgId) : s.add(orgId)
+  collapsedOrgs.value = s
+}
+function usersForOrg(orgId) { return users.value.filter(u => u.org_id === orgId) }
+
+// ── Data loading ──────────────────────────────────────────────────────────
 async function load() {
   const [u, o, r] = await Promise.all([api.get('/users/'), api.get('/orgs/'), api.get('/roles/')])
   users.value    = u.data
@@ -163,9 +162,9 @@ async function load() {
   allRoles.value = r.data
 }
 
-function openCreate() {
+function openCreate(orgId) {
   createErr.value = ''
-  createForm.value = { username: '', email: '', password: '', org_id: orgs.value[0]?.id ?? '', is_superadmin: false, is_org_admin: false }
+  createForm.value = { username: '', description: '', password: '', org_id: orgId, is_superadmin: false, is_org_admin: false }
   showCreate.value = true
 }
 
@@ -183,7 +182,7 @@ function openEdit(user) {
   editTarget.value = user
   editForm.value = {
     username: user.username,
-    email: user.email,
+    description: user.description ?? '',
     password: '',
     org_id: user.org_id,
     is_superadmin: user.is_superadmin,
@@ -195,7 +194,7 @@ async function saveEdit() {
   editErr.value = ''
   const body = {
     username: editForm.value.username,
-    email: editForm.value.email,
+    description: editForm.value.description,
     is_org_admin: editForm.value.is_org_admin,
   }
   if (editForm.value.password) body.password = editForm.value.password
@@ -250,11 +249,117 @@ async function revokeRole(roleId) {
 onMounted(load)
 </script>
 
+<script>
+import { defineComponent, h } from 'vue'
+
+const OrgUserNode = defineComponent({
+  name: 'OrgUserNode',
+  props: ['org', 'depth', 'childrenOf', 'usersForOrg', 'collapsedOrgs', 'toggleOrg', 'auth', 't', 'openCreate', 'openEdit', 'openRoles', 'deleteUser'],
+  setup(props) {
+    return () => {
+      const { org, depth, childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, openRoles, deleteUser } = props
+      const children = childrenOf(org.id)
+      const orgUsers = usersForOrg(org.id)
+      const isCollapsed = collapsedOrgs.has(org.id)
+      const hasContent = children.length > 0 || orgUsers.length > 0
+
+      const header = h('div', {
+        class: 'org-header',
+        style: `padding-left:${depth * 20 + 8}px`,
+      }, [
+        h('span', {
+          onClick: () => toggleOrg(org.id),
+          style: 'cursor:pointer;color:#888;width:14px;text-align:center;user-select:none;flex-shrink:0',
+        }, hasContent ? (isCollapsed ? '▸' : '▾') : '•'),
+        h('span', { class: 'org-header-name' }, org.name),
+        auth.isSuperadmin
+          ? h('button', {
+              class: 'org-add-btn',
+              onClick: (e) => { e.stopPropagation(); openCreate(org.id) },
+            }, '+')
+          : null,
+      ])
+
+      if (isCollapsed) return h('div', [header])
+
+      const userRows = orgUsers.map(u =>
+        h('div', {
+          key: u.id,
+          class: 'user-row',
+          style: `padding-left:${depth * 20 + 30}px`,
+        }, [
+          h('div', { style: 'flex:1;min-width:0' }, [
+            h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+              h('span', { style: 'font-weight:500' }, u.username),
+              u.is_superadmin ? h('span', { class: 'flag flag--super' }, t('users.superadmin')) : null,
+              u.is_org_admin ? h('span', { class: 'flag flag--admin' }, t('users.orgAdmin')) : null,
+            ]),
+            u.description
+              ? h('div', { style: 'font-size:.78em;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, u.description)
+              : null,
+          ]),
+          auth.isAdmin
+            ? h('div', { style: 'display:flex;gap:4px;flex-shrink:0' }, [
+                h('button', { class: 'btn-sm-outline', onClick: () => openEdit(u) }, t('common.edit')),
+                h('button', { class: 'btn-sm-outline', onClick: () => openRoles(u) }, t('users.rolesBtn')),
+                u.id !== auth.user?.id
+                  ? h('button', { class: 'btn-sm-danger', onClick: () => deleteUser(u) }, t('common.delete'))
+                  : null,
+              ])
+            : null,
+        ])
+      )
+
+      const childNodes = children.map(child =>
+        h(OrgUserNode, {
+          key: child.id,
+          org: child,
+          depth: depth + 1,
+          childrenOf, usersForOrg, collapsedOrgs, toggleOrg, auth, t, openCreate, openEdit, openRoles, deleteUser,
+        })
+      )
+
+      return h('div', [header, ...userRows, ...childNodes])
+    }
+  },
+})
+
+export default { components: { OrgUserNode } }
+</script>
+
 <style scoped>
+.card { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+
+.org-header {
+  display:flex; align-items:center; gap:8px; padding:8px 10px;
+  background:#f0f4f8; border-radius:4px; margin-bottom:2px; font-size:.9em;
+}
+.org-header-name { font-weight:600; flex:1; color:#1e3a5f; }
+.org-add-btn {
+  width:22px; height:22px; border-radius:50%; background:#1e3a5f; color:#fff;
+  border:none; cursor:pointer; font-size:1em; line-height:1; display:flex;
+  align-items:center; justify-content:center; flex-shrink:0;
+}
+.org-add-btn:hover { background:#2a4a72; }
+
+.user-row {
+  display:flex; align-items:center; gap:8px; padding:6px 10px; margin-bottom:1px;
+  border-bottom:1px solid #f5f5f5;
+}
+.user-row:hover { background:#fafbfc; }
+
+.flag { padding:1px 6px; border-radius:10px; font-size:.75em; font-weight:600; }
+.flag--super { background:#1e3a5f; color:#fff; }
+.flag--admin { background:#2e7d32; color:#fff; }
+
+.btn-sm-outline { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #1e3a5f; border-radius:3px; background:#fff; color:#1e3a5f; }
+.btn-sm-danger  { padding:2px 8px; font-size:.8em; cursor:pointer; border:1px solid #e55; border-radius:3px; background:#fff; color:#e55; }
+
 .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100 }
 .modal { background:#fff;border-radius:8px;padding:24px;width:420px;max-width:95vw }
 .modal h3 { margin:0 0 16px }
 .field { display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box }
+.field:disabled { background:#f5f5f5; color:#888; }
 .btn-cancel { padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff }
 .btn-primary { padding:6px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer }
 .help-link {
