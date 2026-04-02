@@ -20,6 +20,8 @@
         <h3>{{ t('orgs.createTitle') }}</h3>
         <label>{{ t('common.name') }}</label>
         <input v-model="form.name" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px" />
+        <label>{{ t('common.description') }}</label>
+        <textarea v-model="form.description" rows="2" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit" />
         <label>{{ t('orgs.parent') }}</label>
         <select v-model="form.parent_id" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px">
           <option value="">{{ t('orgs.noneRoot') }}</option>
@@ -39,6 +41,8 @@
         <h3>{{ t('orgs.editTitle') }}</h3>
         <label>{{ t('common.name') }}</label>
         <input v-model="editForm.name" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px" />
+        <label>{{ t('common.description') }}</label>
+        <textarea v-model="editForm.description" rows="2" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit" />
         <label>{{ t('orgs.parent') }}</label>
         <select v-model="editForm.parent_id" style="display:block;width:100%;padding:6px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px">
           <option value="">{{ t('orgs.noneRoot') }}</option>
@@ -65,8 +69,8 @@ const auth = useAuthStore()
 const orgs = ref([])
 const showCreate = ref(false)
 const editTarget = ref(null)
-const form = ref({ name: '', parent_id: '' })
-const editForm = ref({ name: '', parent_id: '' })
+const form = ref({ name: '', description: '', parent_id: '' })
+const editForm = ref({ name: '', description: '', parent_id: '' })
 const err = ref('')
 
 const roots = computed(() => orgs.value.filter(o => !orgs.value.some(p => p.id === o.parent_id)))
@@ -79,16 +83,16 @@ async function load() {
 async function createOrg() {
   err.value = ''
   try {
-    await api.post('/orgs/', { name: form.value.name, parent_id: form.value.parent_id || null })
+    await api.post('/orgs/', { name: form.value.name, description: form.value.description || null, parent_id: form.value.parent_id || null })
     showCreate.value = false
-    form.value = { name: '', parent_id: '' }
+    form.value = { name: '', description: '', parent_id: '' }
     await load()
   } catch (e) { err.value = e.response?.data?.detail || 'Error' }
 }
 
 function startEdit(org) {
   editTarget.value = org
-  editForm.value = { name: org.name, parent_id: org.parent_id || '' }
+  editForm.value = { name: org.name, description: org.description || '', parent_id: org.parent_id || '' }
 }
 
 async function saveEdit() {
@@ -96,6 +100,7 @@ async function saveEdit() {
   try {
     await api.put(`/orgs/${editTarget.value.id}`, {
       name: editForm.value.name,
+      description: editForm.value.description || null,
       parent_id: editForm.value.parent_id || null,
     })
     editTarget.value = null
@@ -129,7 +134,10 @@ const OrgNode = defineComponent({
         h('div', {
           style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9fb;border-left:3px solid #1e3a5f;border-radius:4px',
         }, [
-          h('span', { style: 'flex:1' }, props.org.name),
+          h('span', { style: 'flex:1' }, [
+            props.org.name,
+            props.org.description ? h('span', { style: 'display:block;font-size:.8em;color:#888;font-weight:normal;margin-top:2px;white-space:pre-wrap' }, props.org.description) : null,
+          ]),
           props.isSuperadmin ? h('button', {
             onClick: () => emit('edit', props.org),
             style: 'padding:2px 8px;font-size:.8em;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff',

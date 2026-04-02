@@ -69,12 +69,12 @@ async def _dump_table(conn, table: str, cols: list[str], order_by: str | None = 
 # ── Table definitions (column lists + ordering) ─────────────────────────────
 
 TABLES = [
-    ("ORGS",           "organizations",             ["id", "name", "parent_id"],                           None),
+    ("ORGS",           "organizations",             ["id", "name", "description", "parent_id"],             None),
     ("USERS",          "users",                     ["id", "username", "description", "password_hash",
                                                      "password", "org_id", "is_superadmin", "is_org_admin"], "username"),
-    ("ROLES",          "roles",                     ["id", "name", "org_id", "is_org_role"],                "org_id, is_org_role DESC, name"),
+    ("ROLES",          "roles",                     ["id", "name", "description", "org_id", "is_org_role"], "org_id, is_org_role DESC, name"),
     ("ROLE_INCLUSIONS","role_inclusions",            ["role_id", "included_role_id"],                       None),
-    ("RESOURCES",      "resources",                 ["id", "name", "resource_type", "org_id"],              "org_id, name"),
+    ("RESOURCES",      "resources",                 ["id", "name", "description", "resource_type", "org_id"], "org_id, name"),
     ("PERMISSIONS",    "role_resource_permissions",  ["role_id", "resource_id", "permission_bits"],          None),
     ("USER_ROLES",     "user_roles",                ["user_id", "role_id"],                                 None),
     ("EXCHANGES",      "org_exchanges",             ["id", "org_a_id", "org_b_id"],                        None),
@@ -87,7 +87,7 @@ TABLES = [
 async def main():
     async with engine.connect() as conn:
         # Topologically order orgs (parents first)
-        all_orgs = await _dump_table(conn, "organizations", ["id", "name", "parent_id"])
+        all_orgs = await _dump_table(conn, "organizations", ["id", "name", "description", "parent_id"])
         org_by_id = {o["id"]: o for o in all_orgs}
         ordered_orgs = []
         placed = set()
@@ -135,7 +135,7 @@ async def main():
         print()
         print("ORGS = [")
         for o in ordered_orgs:
-            print(_fmt_row(o, ["id", "name", "parent_id"]))
+            print(_fmt_row(o, ["id", "name", "description", "parent_id"]))
         print("]")
 
         # Print remaining tables

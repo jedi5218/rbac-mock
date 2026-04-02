@@ -54,6 +54,9 @@
           </div>
         </div>
 
+        <!-- Description -->
+        <div v-if="selected.description" style="color:#666;font-size:.9em;margin-bottom:16px;white-space:pre-wrap">{{ selected.description }}</div>
+
         <!-- Org-role notice -->
         <div v-if="selected.is_org_role" style="background:#fffde7;border:1px solid #f9a825;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:.875em;color:#555">
           {{ t('roles.orgMemberNotice', { org: orgName(selected.org_id) }) }}
@@ -203,6 +206,8 @@
         <h3>{{ t('roles.createTitle') }}</h3>
         <label>{{ t('common.name') }}</label>
         <input v-model="form.name" class="field" />
+        <label>{{ t('common.description') }}</label>
+        <textarea v-model="form.description" rows="2" class="field" style="resize:vertical;font-family:inherit" />
         <label>{{ t('common.org') }}</label>
         <input :value="orgName(form.org_id)" class="field" disabled />
         <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -238,7 +243,7 @@ const roleUsers        = ref([])   // users assigned this role
 
 const allUsers     = ref([])
 const showCreate   = ref(false)
-const form         = ref({ name: '', org_id: '' })
+const form         = ref({ name: '', description: '', org_id: '' })
 const newIncId     = ref('')
 const newParentId  = ref('')
 const newUserId    = ref('')
@@ -282,7 +287,7 @@ function roleDisplayName(r) {
   return r.is_org_role ? t('roles.allMembers') : r.name
 }
 function openCreateForOrg(orgId) {
-  form.value = { name: '', org_id: orgId }
+  form.value = { name: '', description: '', org_id: orgId }
   err.value = ''
   showCreate.value = true
 }

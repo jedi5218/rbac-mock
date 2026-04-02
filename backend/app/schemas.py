@@ -20,17 +20,20 @@ class TokenResponse(BaseModel):
 
 class OrgCreate(BaseModel):
     name: str
+    description: Optional[str] = None
     parent_id: Optional[str] = None
 
 
 class OrgUpdate(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     parent_id: Optional[str] = None
 
 
 class OrgOut(BaseModel):
     id: str
     name: str
+    description: Optional[str]
     parent_id: Optional[str]
 
     model_config = {"from_attributes": True}
@@ -79,12 +82,14 @@ class UserOut(BaseModel):
 
 class ResourceCreate(BaseModel):
     name: str
+    description: Optional[str] = None
     resource_type: Literal["document", "video"]
     org_id: str
 
 
 class ResourceUpdate(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     resource_type: Optional[Literal["document", "video"]] = None
     org_id: Optional[str] = None
 
@@ -92,6 +97,7 @@ class ResourceUpdate(BaseModel):
 class ResourceOut(BaseModel):
     id: str
     name: str
+    description: Optional[str]
     resource_type: str
     org_id: str
 
@@ -102,16 +108,19 @@ class ResourceOut(BaseModel):
 
 class RoleCreate(BaseModel):
     name: str
+    description: Optional[str] = None
     org_id: str
 
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class RoleOut(BaseModel):
     id: str
     name: str
+    description: Optional[str]
     org_id: str
     is_org_role: bool
 

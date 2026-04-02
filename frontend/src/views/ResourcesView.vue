@@ -35,6 +35,9 @@
         <label>{{ t('common.name') }}</label>
         <input v-model="form.name" class="field" />
 
+        <label>{{ t('common.description') }}</label>
+        <textarea v-model="form.description" rows="2" class="field" style="resize:vertical;font-family:inherit" />
+
         <label>{{ t('common.type') }}</label>
         <select v-model="form.resource_type" class="field" :disabled="!!editTarget">
           <option value="document">document</option>
@@ -94,7 +97,7 @@ const allRoles  = ref([])
 
 const showModal  = ref(false)
 const editTarget = ref(null)
-const form       = ref({ name: '', resource_type: 'document', org_id: '' })
+const form       = ref({ name: '', description: '', resource_type: 'document', org_id: '' })
 const resPerms   = ref({})
 const origPerms  = ref({})
 const err        = ref('')
@@ -143,7 +146,7 @@ async function load() {
 
 function openCreateForOrg(orgId) {
   editTarget.value = null
-  form.value = { name: '', resource_type: 'document', org_id: orgId }
+  form.value = { name: '', description: '', resource_type: 'document', org_id: orgId }
   resPerms.value = {}
   origPerms.value = {}
   err.value = ''
@@ -152,7 +155,7 @@ function openCreateForOrg(orgId) {
 
 async function openEdit(resource) {
   editTarget.value = resource
-  form.value = { name: resource.name, resource_type: resource.resource_type, org_id: resource.org_id }
+  form.value = { name: resource.name, description: resource.description || '', resource_type: resource.resource_type, org_id: resource.org_id }
   err.value = ''
   const res = await api.get(`/resources/${resource.id}/permissions`)
   const p = {}
@@ -167,7 +170,7 @@ async function saveModal() {
   try {
     let resourceId
     if (editTarget.value) {
-      await api.put(`/resources/${editTarget.value.id}`, { name: form.value.name })
+      await api.put(`/resources/${editTarget.value.id}`, { name: form.value.name, description: form.value.description || null })
       resourceId = editTarget.value.id
     } else {
       const r = await api.post('/resources/', form.value)
@@ -235,7 +238,10 @@ const OrgResourceNode = defineComponent({
             style: `display:flex;align-items:center;gap:8px;padding:6px 10px 6px 28px;margin-bottom:1px;border-bottom:1px solid #f5f5f5${auth.isAdmin ? ';cursor:pointer' : ''}`,
             onClick: () => auth.isAdmin && openEdit(r),
           }, [
-            h('span', { style: 'font-weight:500;flex:1' }, r.name),
+            h('span', { style: 'font-weight:500;flex:1' }, [
+              r.name,
+              r.description ? h('span', { style: 'display:block;font-size:.8em;color:#888;font-weight:normal;margin-top:1px;white-space:pre-wrap' }, r.description) : null,
+            ]),
             h('span', {
               style: r.resource_type === 'document'
                 ? 'padding:2px 8px;border-radius:10px;font-size:.8em;flex-shrink:0;background:#e3f2fd;color:#1565c0'

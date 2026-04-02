@@ -18,6 +18,7 @@ class Organization(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
     parent_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=True)
 
     parent = relationship("Organization", remote_side="Organization.id", back_populates="children")
@@ -49,6 +50,7 @@ class Resource(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
     resource_type = Column(Text, nullable=False)
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
 
@@ -65,6 +67,7 @@ class Role(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
     org_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     is_org_role = Column(Boolean, default=False, nullable=False)
 

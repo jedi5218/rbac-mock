@@ -47,7 +47,7 @@ async def create_org(body: OrgCreate, db: AsyncSession = Depends(get_db), _: Use
         parent = await db.get(Organization, body.parent_id)
         if not parent:
             raise HTTPException(404, "Parent org not found")
-    org = Organization(name=body.name, parent_id=body.parent_id)
+    org = Organization(name=body.name, description=body.description, parent_id=body.parent_id)
     db.add(org)
     await db.flush()          # materialise org.id
     await _create_org_role(db, org.id, parent_id=body.parent_id)
@@ -63,6 +63,8 @@ async def update_org(org_id: str, body: OrgUpdate, db: AsyncSession = Depends(ge
         raise HTTPException(404, "Org not found")
     if body.name is not None:
         org.name = body.name
+    if body.description is not None:
+        org.description = body.description
     if body.parent_id is not None:
         if body.parent_id == org_id:
             raise HTTPException(422, "Org cannot be its own parent")

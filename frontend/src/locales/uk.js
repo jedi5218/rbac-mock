@@ -5,7 +5,7 @@ export default {
     roleTree: 'Дерево ролей', resetDemo: 'Скинути демо', logout: 'Вийти',
   },
   common: {
-    name: 'Назва', org: 'Організація', type: 'Тип', actions: 'Дії',
+    name: 'Назва', description: 'Опис', org: 'Організація', type: 'Тип', actions: 'Дії',
     edit: 'Редагувати', delete: 'Видалити', save: 'Зберегти',
     cancel: 'Скасувати', create: 'Створити', close: 'Закрити',
     add: 'Додати', help: 'Довідка',

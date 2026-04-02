@@ -81,7 +81,7 @@ async def create_role(
     if not org:
         raise HTTPException(404, "Org not found")
     await _admin_owns_org(current_user, body.org_id, db)
-    role = Role(name=body.name, org_id=body.org_id, is_org_role=False)
+    role = Role(name=body.name, description=body.description, org_id=body.org_id, is_org_role=False)
     db.add(role)
     await db.commit()
     await db.refresh(role)
@@ -102,6 +102,8 @@ async def update_role(
     await _admin_owns_org(current_user, role.org_id, db)
     if body.name is not None:
         role.name = body.name
+    if body.description is not None:
+        role.description = body.description
     await db.commit()
     await db.refresh(role)
     return role

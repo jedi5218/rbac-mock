@@ -5,7 +5,7 @@ export default {
     resetDemo: 'Reset Demo', logout: 'Logout',
   },
   common: {
-    name: 'Name', org: 'Org', type: 'Type', actions: 'Actions',
+    name: 'Name', description: 'Description', org: 'Org', type: 'Type', actions: 'Actions',
     edit: 'Edit', delete: 'Delete', save: 'Save', cancel: 'Cancel',
     create: 'Create', close: 'Close', add: 'Add', help: 'Help',
     loading: 'Loading…', noData: 'No data',

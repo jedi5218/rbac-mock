@@ -38,7 +38,7 @@ async def create_resource(
     if not org:
         raise HTTPException(404, "Org not found")
     await _admin_owns_org(current_user, body.org_id, db)
-    resource = Resource(name=body.name, resource_type=body.resource_type, org_id=body.org_id)
+    resource = Resource(name=body.name, description=body.description, resource_type=body.resource_type, org_id=body.org_id)
     db.add(resource)
     await db.commit()
     await db.refresh(resource)
@@ -58,6 +58,8 @@ async def update_resource(
     await _admin_owns_org(current_user, resource.org_id, db)
     if body.name is not None:
         resource.name = body.name
+    if body.description is not None:
+        resource.description = body.description
     if body.resource_type is not None:
         resource.resource_type = body.resource_type
     if body.org_id is not None:
