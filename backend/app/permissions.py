@@ -46,75 +46,135 @@ async def get_effective_permissions(db: AsyncSession, user_id: str) -> list[dict
     """
     Resolve effective permissions with foreign-propagation limits.
 
-    Once a cross-org boundary is crossed during role tree traversal, only roles
-    from the crossed-into org's subtree may be followed. Further foreign
-    inclusions are blocked. This prevents transitive cross-org sharing.
+    Walks the role inclusion DAG in Python to avoid heavy recursive CTEs
+    that can OOM small Postgres instances.
+
+    Propagation rule: before any foreign crossing, roles follow inclusions
+    freely. A "vertical line" through org X is defined as X's ancestors
+    (up to root) plus X's descendants — but NOT siblings (other children
+    of X's parent). A foreign crossing occurs when moving to an org outside
+    the current org's vertical line. After a crossing into org B, the role
+    may only continue along B's vertical line: B's ancestors and descendants,
+    but not B's siblings or other branches. This prevents lateral leaks
+    (e.g., A↔B exchange won't leak to D via B1↔D if B1 is a child of B).
     """
-    sql = text("""
-        WITH RECURSIVE
-        -- Pre-compute org descendant relationships (all UUIDs cast to text for uniform typing)
-        org_descendants AS (
-            SELECT id::text AS root_id, id::text AS desc_id FROM organizations
-            UNION ALL
-            SELECT od.root_id, o.id::text
-            FROM organizations o
-            JOIN org_descendants od ON o.parent_id::text = od.desc_id
-        ),
+    # 1. Fetch all org parent relationships
+    org_rows = (await db.execute(text(
+        "SELECT id::text, parent_id::text FROM organizations"
+    ))).fetchall()
+    parent_of: dict[str, str | None] = {}
+    children_of: dict[str | None, list[str]] = {}
+    for oid, pid in org_rows:
+        parent_of[oid] = pid
+        children_of.setdefault(pid, []).append(oid)
 
-        -- Walk the role inclusion tree with propagation tracking
-        role_tree AS (
-            -- Base: user's directly assigned roles (no boundary crossed)
-            SELECT r.id::text AS role_id, r.org_id::text AS org_id,
-                   CAST(NULL AS TEXT) AS home_subtree_root
-            FROM user_roles ur
-            JOIN roles r ON r.id = ur.role_id
-            WHERE ur.user_id = :uid
+    # ancestors_of[org] = {org, parent, grandparent, ...}
+    ancestors_of: dict[str, set[str]] = {}
+    def _build_ancestors(oid: str) -> set[str]:
+        if oid in ancestors_of:
+            return ancestors_of[oid]
+        s = {oid}
+        pid = parent_of.get(oid)
+        if pid is not None and pid in parent_of:
+            s |= _build_ancestors(pid)
+        ancestors_of[oid] = s
+        return s
 
-            UNION ALL
+    # subtree_of[org] = {org, children, grandchildren, ...}
+    subtree_of: dict[str, set[str]] = {}
+    def _build_subtree(oid: str) -> set[str]:
+        if oid in subtree_of:
+            return subtree_of[oid]
+        s = {oid}
+        for child in children_of.get(oid, []):
+            s |= _build_subtree(child)
+        subtree_of[oid] = s
+        return s
 
-            -- Recursive: follow inclusions with propagation limits
-            SELECT r2.id::text, r2.org_id::text,
-                CASE
-                    -- Already crossed a boundary: keep the same home root
-                    WHEN rt.home_subtree_root IS NOT NULL THEN rt.home_subtree_root
-                    -- Same org: no crossing
-                    WHEN r2.org_id::text = rt.org_id THEN NULL
-                    -- Child org (in subtree): no crossing
-                    WHEN EXISTS (
-                        SELECT 1 FROM org_descendants
-                        WHERE root_id = rt.org_id AND desc_id = r2.org_id::text
-                    ) THEN NULL
-                    -- Crossing into a foreign org: record as new home root
-                    ELSE r2.org_id::text
-                END
-            FROM role_inclusions ri
-            JOIN role_tree rt ON ri.role_id::text = rt.role_id
-            JOIN roles r2 ON ri.included_role_id = r2.id
-            WHERE
-                -- No boundary crossed yet: allow any inclusion
-                rt.home_subtree_root IS NULL
-                -- Already crossed: only allow if included role is within home subtree
-                OR EXISTS (
-                    SELECT 1 FROM org_descendants
-                    WHERE root_id = rt.home_subtree_root AND desc_id = r2.org_id::text
-                )
-        )
-        SELECT
-            res.id          AS resource_id,
-            res.name        AS resource_name,
-            res.resource_type,
-            BIT_OR(rrp.permission_bits) AS bits
-        FROM role_tree rt
-        JOIN role_resource_permissions rrp ON rrp.role_id::text = rt.role_id
+    for oid, _ in org_rows:
+        _build_ancestors(oid)
+        _build_subtree(oid)
+
+    # vertical_line_of[org] = ancestors ∪ descendants (no siblings)
+    vertical_line_of: dict[str, set[str]] = {}
+    for oid in parent_of:
+        vertical_line_of[oid] = ancestors_of[oid] | subtree_of[oid]
+
+    # 2. Fetch role org mappings and inclusion edges
+    role_org: dict[str, str] = {}
+    for row in (await db.execute(text("SELECT id::text, org_id::text FROM roles"))).fetchall():
+        role_org[row[0]] = row[1]
+
+    inclusions: dict[str, list[str]] = {}  # parent_role -> [included_role, ...]
+    for row in (await db.execute(text(
+        "SELECT role_id::text, included_role_id::text FROM role_inclusions"
+    ))).fetchall():
+        inclusions.setdefault(row[0], []).append(row[1])
+
+    # 3. Fetch user's directly assigned roles
+    user_role_rows = (await db.execute(
+        text("SELECT role_id::text FROM user_roles WHERE user_id = :uid"),
+        {"uid": user_id},
+    )).fetchall()
+
+    # 4. Walk the DAG with propagation tracking
+    #    crossed_into: the org we crossed into via a foreign boundary, or None.
+    #    After crossing into org B, only B's vertical line is reachable.
+    collected_roles: set[str] = set()
+    queue: list[tuple[str, str | None]] = []
+    for (rid,) in user_role_rows:
+        queue.append((rid, None))
+
+    visited: set[tuple[str, str | None]] = set()
+    while queue:
+        role_id, crossed_into = queue.pop()
+        state = (role_id, crossed_into)
+        if state in visited:
+            continue
+        visited.add(state)
+        collected_roles.add(role_id)
+
+        cur_org = role_org.get(role_id)
+        if not cur_org:
+            continue
+        for child_id in inclusions.get(role_id, []):
+            child_org = role_org.get(child_id)
+            if not child_org:
+                continue
+
+            if crossed_into is not None:
+                # Already crossed — only allow within crossed_into's vertical line
+                if child_org not in vertical_line_of.get(crossed_into, set()):
+                    continue
+                new_crossed = crossed_into
+            else:
+                # No crossing yet — check if this is a vertical move
+                if child_org in vertical_line_of.get(cur_org, set()):
+                    new_crossed = None
+                else:
+                    new_crossed = child_org  # lateral move = foreign crossing
+
+            queue.append((child_id, new_crossed))
+
+    if not collected_roles:
+        return []
+
+    # 5. Fetch permissions for collected roles
+    placeholders = ", ".join(f":r{i}" for i in range(len(collected_roles)))
+    params = {f"r{i}": rid for i, rid in enumerate(collected_roles)}
+    result = await db.execute(text(f"""
+        SELECT res.id, res.name, res.resource_type,
+               BIT_OR(rrp.permission_bits) AS bits
+        FROM role_resource_permissions rrp
         JOIN resources res ON res.id = rrp.resource_id
+        WHERE rrp.role_id::text IN ({placeholders})
         GROUP BY res.id, res.name, res.resource_type
-    """)
-    result = await db.execute(sql, {"uid": user_id})
+    """), params)
     rows = result.mappings().all()
     return [
         {
-            "resource_id": str(row["resource_id"]),
-            "resource_name": row["resource_name"],
+            "resource_id": str(row["id"]),
+            "resource_name": row["name"],
             "resource_type": row["resource_type"],
             "permission_bits": row["bits"],
             "permission_labels": decode_bits(row["resource_type"], row["bits"]),

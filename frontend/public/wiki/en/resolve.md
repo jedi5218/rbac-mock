@@ -15,6 +15,14 @@ Resolution results are cached in-process. The cache is invalidated:
 - **Per user** when their role assignments change.
 - **Globally** when any role permission or role inclusion changes.
 
+## Foreign propagation
+
+When traversing the role DAG, cross-org inclusions (via exchanges) are subject to **vertical-line propagation limits**. After crossing into a foreign org, only that org's ancestors and descendants are reachable — not siblings or unrelated branches. See [Propagation Algorithm](/wiki/propagation).
+
+## At scale
+
+This demo resolves permissions on demand via a Python-side DAG walk. In a production system (~10^6 users), effective permissions are **pre-computed** into a materialized table and updated by background workers when the role graph changes. Access checks become O(1) lookups instead of graph traversals. See [Architecture](/wiki/architecture).
+
 ## Permission labels
 
 | Type | Bit | Label |

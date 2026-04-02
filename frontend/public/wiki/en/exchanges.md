@@ -26,6 +26,8 @@ Either side can close the exchange. Closing will:
 
 ## Propagation limits
 
-When a role is included across an org boundary via an exchange, the foreign role's own foreign inclusions are **not** propagated further. This prevents chains like Org A -> Org B -> Org C from granting Org A unintended access to Org C's resources.
+When a role is included across an org boundary via an exchange, further propagation is restricted to the crossed-into org's **vertical line** — its ancestors and descendants, but not siblings or unrelated branches. This prevents chains like Org A → Org B → Org C from granting Org A unintended access to Org C's resources, while still allowing natural propagation up and down within Org B's hierarchy.
 
 The Role Tree view shows blocked propagation with dimmed, struck-through role names and a `blocked` badge.
+
+See [Propagation Algorithm](/wiki/propagation) for a detailed walkthrough.

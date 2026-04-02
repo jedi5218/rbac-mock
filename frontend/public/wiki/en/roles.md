@@ -22,7 +22,11 @@ Inclusions are split into two sections:
 
 Roles from outside your org's ancestor/descendant chain are marked with a pink **foreign** badge. Foreign roles can only be included if they are exposed through an org exchange.
 
-**Important:** When a role with foreign inclusions is itself shared externally (via an exchange), the foreign inclusions do not propagate. Only the role's own permissions and those from its org subtree are shared. This prevents unintended transitive cross-org permission sharing.
+**Vertical-line rule:** When a role inclusion crosses an org boundary (a "foreign crossing"), further propagation is restricted to the crossed-into org's **vertical line** — its ancestors and descendants, but not its siblings or other branches. This allows natural up/down propagation within the foreign org's hierarchy while preventing transitive leaks to unrelated orgs.
+
+For example: if your role includes a role from Org B (via exchange), you also receive permissions from B's parent and child orgs through the inclusion chain. But if B's child has an exchange with Org D, D's roles are blocked — they fall outside B's vertical line.
+
+See [Propagation Algorithm](/wiki/propagation) for a detailed walkthrough with examples.
 
 ## Permission bits
 

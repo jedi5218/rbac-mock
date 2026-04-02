@@ -35,7 +35,14 @@ Organizations form a tree. **Superadmins** manage everything. **Org admins** man
 
 ### Foreign Propagation Limits
 
-When a role crosses an org boundary via an exchange, its own foreign inclusions do not chain further. This prevents unintended transitive permission leaks across organizations.
+When a role crosses an org boundary via an exchange, further propagation is restricted to the crossed-into org's **vertical line** (ancestors + descendants, no siblings). This prevents transitive permission leaks while allowing natural up/down propagation within the foreign org's hierarchy. See [Propagation Algorithm](/wiki/propagation) for a full walkthrough.
+
+## System Design
+
+- [Architecture](/wiki/architecture) — production scalability overview (CQRS, materialized permissions, caching)
+- [Propagation Algorithm](/wiki/propagation) — foreign propagation rules with worked examples
+- [Design Decisions](/wiki/design-decisions) — rationale behind bitmasks, DAG, exchanges, propagation limits
+- [Glossary](/wiki/glossary) — definitions of all domain terms
 
 ## Demo Reset
 
